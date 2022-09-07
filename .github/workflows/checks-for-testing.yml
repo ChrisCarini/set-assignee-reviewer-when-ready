@@ -1,0 +1,32 @@
+name: "checks for testing (2sec & 4sec)"
+
+on:
+  pull_request:
+
+jobs:
+
+  test-2s:
+    name: 'Test 2sec'
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Fetch Sources
+        uses: actions/checkout@v3
+
+      - name: Sleep 2sec
+        shell: bash
+        run: |
+          sleep 2
+
+  test-4s:
+    name: 'Test 4sec'
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Fetch Sources
+        uses: actions/checkout@v3
+
+      - name: Sleep 4sec
+        shell: bash
+        run: |
+          sleep 4
