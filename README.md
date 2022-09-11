@@ -17,11 +17,11 @@ This GitHub action was created because [Dependabot](https://docs.github.com/en/c
 - Set [assignees](https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file#assignees) and/or [reviewers](https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file#reviewers) upon Dependabot PR creation.
 - Not set assignees or reviewers on Dependabot PRs.
 
-I have my repos configured to auto-merge Dependabot PRs once all required checks have passed. I really **only** want to get requested to review a PR (or, assigned a PR) if one of the required checks ends in an 'unacceptable' state (ie, it failed, or timed out). As such, this GitHub Action was created to enable me to be notified (via being requested for reviews) when a required check has failed. I implemented this GitHub Action with various configuration options to allow for flexibility in configuration; see the [options section](#-options) for details.
+This action is intended to allow users to have reviews requested (or, assigned) on PRs once one or more of the required checks ends in an 'unacceptable' state (ie, it failed, or timed out). A good use-case / example of this is Dependabot PRs which you might have configured to auto-merge, and only want to be notified (via being requested for reviews) when a required check has failed. This GitHub Action provides various configuration options to allow for flexibility in configuration; see the [options section](#-options) for details.
 
 # Usage
 
-Add the action to your [GitHub Action Workflow file](https://help.github.com/en/actions/configuring-and-managing-workflows/configuring-a-workflow#creating-a-workflow-file) - the only thing you _need_ to specify are the JetBrains products & versions you wish to run against.
+Add the action to a [GitHub Action Workflow file](https://help.github.com/en/actions/configuring-and-managing-workflows/configuring-a-workflow#creating-a-workflow-file).
 
 A minimal example of a workflow step is below:
 
@@ -57,7 +57,7 @@ A minimal example of a workflow step is below:
             with:
               assignees: 'ChrisCarini'
               reviewers: 'ChrisCarini'
-              waitSeconds: 30
+              delayBeforeRequestingReviews: 30
               token: ${{ secrets.REPO_SCOPE_GITHUB_TOKEN }}
     ```
 
@@ -67,15 +67,15 @@ This GitHub Action exposes several input options.
 
 ### Option Table
 
-|            Input            | Description                                                                                                                 |     Usage      |                Default                 |
-|:---------------------------:|:----------------------------------------------------------------------------------------------------------------------------|:--------------:|:--------------------------------------:|
-|            `token`          | The GitHub token to use for making API requests.                                                                            |   *Required*   |                  N/A                   |
-|    `acceptableConclusions`  | The acceptable conclusion for each check run that has completed. Defaults to all known conclusions.                         |   *Optional*   | `success, neutral, cancelled, skipped` |
-|   `unacceptableConclusions` | The unacceptable conclusion for each check run that has completed. Defaults to no unacceptable conclusions.                 |   *Optional*   | `failure, timed_out, action_required`  |
-|          `assignees`        | List of assignees to assign the PR to. Defaults to no one.                                                                  | *Required* (*) |                _No One_                |
-|          `reviewers`        | List of reviewers to request reviews on the PR. Defaults to no one.                                                         | *Required* (*) |                _No One_                |
-|     `requiredChecksOnly`    | Only consider `required checks`. Defaults to true.                                                                          |   *Optional*   |                 `true`                 |
-|         `waitSeconds`       | If all checks having acceptable conclusions, wait N seconds before requesting reviewers on the PR. Defaults to 10 minutes.  |   *Optional*   |                 `600`                  |
+|             Input              | Description                                                                                                                                                                           |     Usage      |                Default                 |
+|:------------------------------:|:--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:--------------:|:--------------------------------------:|
+|            `token`             | The GitHub token to use for making API requests.                                                                                                                                      |   *Required*   |                  N/A                   |
+|    `acceptableConclusions`     | The acceptable conclusion for each check run that has completed. Defaults to `success, neutral, cancelled, skipped`.                                                                  |   *Optional*   | `success, neutral, cancelled, skipped` |
+|   `unacceptableConclusions`    | The unacceptable conclusion for each check run that has completed. Defaults to `failure, timed_out, action_required`.                                                                 |   *Optional*   | `failure, timed_out, action_required`  |
+|          `assignees`           | List of assignees to assign the PR to. Defaults to 'no one'.                                                                                                                          | *Required* (*) |                _No One_                |
+|          `reviewers`           | List of reviewers to request reviews on the PR. Defaults to 'no one'.                                                                                                                 | *Required* (*) |                _No One_                |
+|      `requiredChecksOnly`      | Only consider `required checks`. Defaults to `true`.                                                                                                                                  |   *Optional*   |                 `true`                 |
+| `delayBeforeRequestingReviews` | If all checks having acceptable conclusions, wait N seconds before requesting reviewers on the PR. Defaults to `0` which disables requesting reviewers on PRs with acceptable checks. |   *Optional*   |             `0` (disabled)             |
 
 `(*)` = You can set one (ie, either `assignees` or `reviewers`), or both of these inputs. Setting neither of these inputs doesn't do anything.
 
@@ -110,7 +110,7 @@ This optional input allows the user to specify the check run 'conclusions' they 
 
 **Default Values:** `'success, neutral, cancelled, skipped'`
 
-To be 'acceptable' means that the PR will **_NOT_** be assigned / review requested, **UNLESS** the [`waitSeconds`](#waitseconds) option is also configured.
+To be 'acceptable' means that the PR will **_NOT_** be assigned / review requested, **UNLESS** the [`delayBeforeRequestingReviews`](#delayBeforeRequestingReviews) option is also configured.
 
 ### `unacceptableConclusions`
 
@@ -141,7 +141,7 @@ This optional input allows the user to mark if they want **all** checks, or **on
 |   `true`    |      ✅       | **Only required** checks on a PR to complete and have an ['acceptable conclusion'](#acceptableconclusions) |
 |   `false`   |      ❌       | **ALL** checks on a PR to complete **_and_** have an ['acceptable conclusion'](#acceptableconclusions)     |
 
-### `waitSeconds`
+### `delayBeforeRequestingReviews`
 
 This optional input allows the user to both:
 
@@ -152,7 +152,9 @@ That is to say, that if this option is set, any check runs with ['acceptable con
 
 The second item ("how long to wait") is intended provide 'buffer time', allowing any bots / workflows / apps that are configured to auto-merge PRs once all checks have completed.
 
-If you want any check runs with ['acceptable conclusions'](#acceptableconclusions) to have assignees/reviewers set as configured **right away**, set this value to something small (ie, `0`).
+If you want any check runs with ['acceptable conclusions'](#acceptableconclusions) to have assignees/reviewers set as configured **right away**, set this value to something small (ie, `1`).
+
+If you want to disable this functionality entirely, leave the value as the default of `0`, or manually specify in your workflow for explicitness.
 
 ## Conclusions
 

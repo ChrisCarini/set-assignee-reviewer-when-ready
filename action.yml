@@ -12,11 +12,11 @@ inputs:
     required: true
 
   acceptableConclusions:
-    description: 'The acceptable conclusion for each check run that has completed. Defaults to all known conclusions.'
+    description: 'The acceptable conclusion for each check run that has completed. Defaults to `success, neutral, cancelled, skipped`.'
     required: false
     default: 'success, neutral, cancelled, skipped'
   unacceptableConclusions:
-    description: 'The unacceptable conclusion for each check run that has completed. Defaults to no unacceptable conclusions.'
+    description: 'The unacceptable conclusion for each check run that has completed. Defaults to `failure, timed_out, action_required`.'
     required: false
     default: 'failure, timed_out, action_required'
 
@@ -34,10 +34,10 @@ inputs:
     required: false
     default: 'true'
 
-  waitSeconds:
-    description: 'If all checks having acceptable conclusions, wait N seconds before requesting reviewers on the PR. Defaults to 10 minutes.'
+  delayBeforeRequestingReviews:
+    description: 'If all checks having acceptable conclusions, wait N seconds before requesting reviewers on the PR. Defaults to `0` which disables requesting reviewers on PRs with acceptable checks.'
     required: false
-    default: '600'
+    default: '0'
 
 runs:
   using: 'node16'

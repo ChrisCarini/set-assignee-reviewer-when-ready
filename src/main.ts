@@ -5,8 +5,8 @@ import {
   CheckRun,
   coreDebugJson,
   getCheckRuns,
-  getInput,
   getInputArray,
+  getInputWithDefault,
   getPr,
   getRequiredCheckNames,
   requestReviewers,
@@ -23,18 +23,20 @@ const ALL_VALID_CHECK_CONCLUSIONS = [
   'action_required',
 ];
 
-/**
- * Gather all the inputs from the user workflow file.
- */
-function gatherInputs(): {
+type UserInputs = {
   acceptableConclusions: string[];
   unacceptableConclusions: string[];
   assignees: string[];
   reviewers: string[];
   requiredChecksOnly: boolean;
-  waitSeconds: string | null;
+  delayBeforeRequestingReviews: number;
   check: string;
-} {
+};
+
+/**
+ * Gather all the inputs from the user workflow file.
+ */
+function gatherInputs(): UserInputs {
   core.startGroup('Gathering inputs...');
   coreDebugJson(github.context, 'github.context');
 
@@ -45,18 +47,18 @@ function gatherInputs(): {
   const unacceptableConclusions = getInputArray('unacceptableConclusions', []);
   const assignees = getInputArray('assignees', []);
   const reviewers = getInputArray('reviewers', []);
-  const requiredChecksOnly = getInput('requiredChecksOnly', 'true') === 'true';
-  const waitSeconds = getInput('waitSeconds', null);
+  const requiredChecksOnly = getInputWithDefault('requiredChecksOnly', 'true') === 'true';
+  const delayBeforeRequestingReviews = parseInt(getInputWithDefault('delayBeforeRequestingReviews', '0'));
   const check = requiredChecksOnly ? 'required check' : 'check';
 
   core.debug('Inputs:');
   core.debug('=======');
-  core.debug(`acceptableConclusions:   ${acceptableConclusions}`);
-  core.debug(`unacceptableConclusions: ${unacceptableConclusions}`);
-  core.debug(`assignees:               ${assignees}`);
-  core.debug(`reviewers:               ${reviewers}`);
-  core.debug(`requiredChecksOnly:      ${requiredChecksOnly}`);
-  core.debug(`waitSeconds:             ${waitSeconds}`);
+  core.debug(`acceptableConclusions:        ${acceptableConclusions}`);
+  core.debug(`unacceptableConclusions:      ${unacceptableConclusions}`);
+  core.debug(`assignees:                    ${assignees}`);
+  core.debug(`reviewers:                    ${reviewers}`);
+  core.debug(`requiredChecksOnly:           ${requiredChecksOnly}`);
+  core.debug(`delayBeforeRequestingReviews: ${delayBeforeRequestingReviews}`);
   core.debug('');
   core.endGroup(); // Gathering inputs...
   return {
@@ -65,7 +67,7 @@ function gatherInputs(): {
     assignees,
     reviewers,
     requiredChecksOnly,
-    waitSeconds,
+    delayBeforeRequestingReviews,
     check,
   };
 }
@@ -137,18 +139,18 @@ async function computeCheckRunStatus(
 
 async function takeAction(
   isAcceptable: boolean,
-  waitSeconds: string | null,
+  delayBeforeRequestingReviews: number,
   check: string,
   assignees: string[],
   reviewers: string[],
   isUnacceptable: boolean
 ) {
   core.startGroup(`Taking action on PR #${getPr().number}`);
-  if (isAcceptable && waitSeconds) {
+  if (isAcceptable && delayBeforeRequestingReviews) {
     // All checks have passed
-    core.info(`All ${check} runs have acceptable conclusions. Waiting for ${parseInt(waitSeconds)} seconds...`);
-    await wait(parseInt(waitSeconds) * 1000);
-    core.info(`Finished waiting for ${waitSeconds} seconds.`);
+    core.info(`All ${check} runs have acceptable conclusions. Waiting for ${delayBeforeRequestingReviews} seconds...`);
+    await wait(delayBeforeRequestingReviews * 1000);
+    core.info(`Finished waiting for ${delayBeforeRequestingReviews} seconds.`);
     await assignAndRequestReviewers(assignees, reviewers);
   } else if (isUnacceptable) {
     core.info(`Some ${check} runs have unacceptable conclusions.`);
@@ -180,7 +182,7 @@ async function run(): Promise<void> {
       assignees,
       reviewers,
       requiredChecksOnly,
-      waitSeconds,
+      delayBeforeRequestingReviews,
       check,
     } = gatherInputs();
 
@@ -193,9 +195,11 @@ async function run(): Promise<void> {
       unacceptableConclusions
     );
 
-    await takeAction(acceptable, waitSeconds, check, assignees, reviewers, unacceptable);
+    await takeAction(acceptable, delayBeforeRequestingReviews, check, assignees, reviewers, unacceptable);
   } catch (error: any) {
     core.setFailed(error.message);
+    core.endGroup(); // End any lingering groups...
+    process.exit(1);
   }
 }
 

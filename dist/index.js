@@ -9525,45 +9525,53 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.coreDebugJson = exports.getInput = exports.getInputArray = exports.getRequiredCheckNames = exports.getCheckRuns = exports.setAssignees = exports.requestReviewers = exports.getPr = void 0;
+exports.coreDebugJson = exports.getInputWithDefault = exports.getInputArray = exports.getRequiredCheckNames = exports.getCheckRuns = exports.setAssignees = exports.requestReviewers = exports.getPr = void 0;
 const github = __importStar(__nccwpck_require__(5438));
 const core = __importStar(__nccwpck_require__(2186));
 const token = core.getInput('token', { required: true });
 const client = github.getOctokit(token);
+/**
+ * Get the current context's PR information
+ */
 function getPr() {
     const pullRequest = github.context.payload.workflow_run.pull_requests[0];
-    if (!pullRequest) {
-        core.debug(`NO PR FOUND IN CONTEXT (github.content.payload.workflow_run.pull_requests[0]):`);
-        return undefined;
+    if (pullRequest === undefined) {
+        throw new Error(`NO PR FOUND IN CONTEXT (github.content.payload.workflow_run.pull_requests[0]):`);
     }
     return pullRequest;
 }
 exports.getPr = getPr;
-let alreadyRequestedReviewers = false;
-function requestReviewers(pr, reviewers) {
+/**
+ * Request reviews on the current context's PR from the specified reviewers.
+ * @param reviewers The list of reviewers to request a review.
+ */
+function requestReviewers(reviewers) {
     return __awaiter(this, void 0, void 0, function* () {
-        if (alreadyRequestedReviewers) {
-            core.warning('Already requested reviewers. Skipping second call.');
-            return;
-        }
+        const pr = getPr().number;
         core.info(`Requesting Reviewers for PR #${pr} to: ${reviewers.join(',')}`);
         const response = yield client.rest.pulls.requestReviewers({
             owner: github.context.repo.owner,
             repo: github.context.repo.repo,
             pull_number: pr,
-            reviewers: reviewers,
+            reviewers,
         });
         coreDebugJson(response, `requestReviewers(${pr}, [${reviewers.join(',')}]) > response`);
-        alreadyRequestedReviewers = true;
     });
 }
 exports.requestReviewers = requestReviewers;
-function setAssignees(pr, assignees) {
+/**
+ *
+ * Assign the current context's PR to the specified assignees.
+ * @param assignees The list of assignees to assign the PR.
+ */
+function setAssignees(assignees) {
     return __awaiter(this, void 0, void 0, function* () {
+        const pr = getPr().number;
         core.info(`Setting Assignees for PR #${pr} to: ${assignees.join(',')}`);
+        const { owner, repo } = github.context.repo;
         const response = yield client.rest.issues.addAssignees({
-            owner: github.context.repo.owner,
-            repo: github.context.repo.repo,
+            owner,
+            repo,
             issue_number: pr,
             assignees: assignees,
         });
@@ -9571,6 +9579,9 @@ function setAssignees(pr, assignees) {
     });
 }
 exports.setAssignees = setAssignees;
+/**
+ * Get the checkruns for the current context's workflow_run for the head SHA.
+ */
 function getCheckRuns() {
     return __awaiter(this, void 0, void 0, function* () {
         const ref = github.context.payload.workflow_run.head_sha;
@@ -9582,14 +9593,14 @@ function getCheckRuns() {
             ref,
         })).data.check_runs;
         core.info(`Retrieved ${checkRuns.length} check runs.`);
-        checkRuns.forEach((checkRun, index) => {
-            core.debug(`[${String(index).padStart(2, ' ')}] ${checkRun.name} (${checkRun.status}) -> ${checkRun.conclusion}`);
-        });
         coreDebugJson(checkRuns, 'getCheckRuns() > checkRuns');
         return checkRuns;
     });
 }
 exports.getCheckRuns = getCheckRuns;
+/**
+ * Get the required checks for the base ref.
+ */
 function getRequiredCheckNames() {
     var _a, _b;
     return __awaiter(this, void 0, void 0, function* () {
@@ -9611,6 +9622,11 @@ function getRequiredCheckNames() {
     });
 }
 exports.getRequiredCheckNames = getRequiredCheckNames;
+/**
+ * Get user inputs as an array (expects the user input to be CSV)
+ * @param name The name of the user input
+ * @param defaultVal The default value
+ */
 function getInputArray(name, defaultVal) {
     return (core
         .getInput(name)
@@ -9618,10 +9634,28 @@ function getInputArray(name, defaultVal) {
         .map((i) => i.trim()) || defaultVal);
 }
 exports.getInputArray = getInputArray;
-function getInput(name, defaultVal) {
-    return core.getInput(name) || defaultVal;
+/**
+ * Get user inputs
+ * @param name The name of the user input
+ * @param defaultValue The default value
+ */
+function getInputWithDefault(name, defaultValue) {
+    return core.getInput(name) || defaultValue;
 }
-exports.getInput = getInput;
+exports.getInputWithDefault = getInputWithDefault;
+// TODO - Checking w/ Steve; this might be better to replace the above 2 methods.
+// export function smarterGetInputWithDefault<Type extends string | string[]>(name: string, defaultValue: Type): Type {
+//   const input = core.getInput(name);
+//   if (Array.isArray(defaultValue)) {
+//     return (input.split(',').map((i) => i.trim()) || defaultValue) as Type;
+//   }
+//   return (input || defaultValue) as Type;
+// }
+/**
+ * Helper to pretty-print JSON as log debug.
+ * @param value The object to pretty-print
+ * @param name The name (used for header/footer)
+ */
 function coreDebugJson(value, name) {
     core.debug(`====== BEGIN ${name} ======`);
     core.debug(JSON.stringify(value, null, 4));
@@ -9683,105 +9717,145 @@ const ALL_VALID_CHECK_CONCLUSIONS = [
     'timed_out',
     'action_required',
 ];
-function run() {
+/**
+ * Gather all the inputs from the user workflow file.
+ */
+function gatherInputs() {
+    core.startGroup('Gathering inputs...');
+    (0, github_1.coreDebugJson)(github.context, 'github.context');
+    const pr = (0, github_1.getPr)();
+    core.info(`PR #: ${pr.number}`);
+    const acceptableConclusions = (0, github_1.getInputArray)('acceptableConclusions', ALL_VALID_CHECK_CONCLUSIONS);
+    const unacceptableConclusions = (0, github_1.getInputArray)('unacceptableConclusions', []);
+    const assignees = (0, github_1.getInputArray)('assignees', []);
+    const reviewers = (0, github_1.getInputArray)('reviewers', []);
+    const requiredChecksOnly = (0, github_1.getInputWithDefault)('requiredChecksOnly', 'true') === 'true';
+    const delayBeforeRequestingReviews = parseInt((0, github_1.getInputWithDefault)('delayBeforeRequestingReviews', '0'));
+    const check = requiredChecksOnly ? 'required check' : 'check';
+    core.debug('Inputs:');
+    core.debug('=======');
+    core.debug(`acceptableConclusions:        ${acceptableConclusions}`);
+    core.debug(`unacceptableConclusions:      ${unacceptableConclusions}`);
+    core.debug(`assignees:                    ${assignees}`);
+    core.debug(`reviewers:                    ${reviewers}`);
+    core.debug(`requiredChecksOnly:           ${requiredChecksOnly}`);
+    core.debug(`delayBeforeRequestingReviews: ${delayBeforeRequestingReviews}`);
+    core.debug('');
+    core.endGroup(); // Gathering inputs...
+    return {
+        acceptableConclusions,
+        unacceptableConclusions,
+        assignees,
+        reviewers,
+        requiredChecksOnly,
+        delayBeforeRequestingReviews,
+        check,
+    };
+}
+function getChecksToCheck(requiredChecksOnly, check) {
     return __awaiter(this, void 0, void 0, function* () {
-        try {
-            core.startGroup('Gathering inputs...');
-            (0, github_1.coreDebugJson)(github.context, 'github.context');
-            const pr = (0, github_1.getPr)();
-            if (pr === undefined) {
-                core.warning(`PR is undefined. Exiting.`);
-                return;
-            }
-            core.info(`PR #: ${pr.number}`);
-            const acceptableConclusions = (0, github_1.getInputArray)('acceptableConclusions', ALL_VALID_CHECK_CONCLUSIONS);
-            const unacceptableConclusions = (0, github_1.getInputArray)('unacceptableConclusions', []);
-            const assignees = (0, github_1.getInputArray)('assignees', []);
-            const reviewers = (0, github_1.getInputArray)('reviewers', []);
-            const requiredChecksOnly = (0, github_1.getInput)('requiredChecksOnly', 'true') === 'true';
-            const waitSeconds = (0, github_1.getInput)('waitSeconds', null);
-            core.debug('Inputs:');
-            core.debug('=======');
-            core.debug(`acceptableConclusions:   ${acceptableConclusions}`);
-            core.debug(`unacceptableConclusions: ${unacceptableConclusions}`);
-            core.debug(`assignees:               ${assignees}`);
-            core.debug(`reviewers:               ${reviewers}`);
-            core.debug(`requiredChecksOnly:      ${requiredChecksOnly}`);
-            core.debug(`waitSeconds:             ${waitSeconds}`);
-            core.debug('');
-            core.endGroup(); //Gathering inputs...
-            core.startGroup(`Computing Check Run Status for PR #${pr.number}...`);
-            const allCheckRuns = yield (0, github_1.getCheckRuns)();
-            const completedChecks = allCheckRuns.filter((checkRun) => checkRun.status === 'completed');
-            core.info(`Found ${completedChecks.length} completed checks`);
-            const allCompleted = allCheckRuns.length == completedChecks.length;
-            if (!allCompleted) {
-                core.warning('All check runs have *NOT* completed. Exiting.');
-                return;
-            }
-            // Call getRequiredCheckNames() outside the filter so we only make a single API call.
-            const requiredCheckNames = requiredChecksOnly ? yield (0, github_1.getRequiredCheckNames)() : undefined;
-            const checksToCheck = requiredChecksOnly
-                ? completedChecks.filter(
-                // If requiredCheckNames is undefined, that means either (1) we could not get the baseRef, or
-                // (2) the particular branch has no required checks.
-                (checkRun) => requiredCheckNames === undefined || requiredCheckNames.includes(checkRun.name))
-                : completedChecks;
-            core.info(`All check runs have completed.`);
-            const acceptableConclusionChecks = checksToCheck.filter((checkRun) => {
-                return acceptableConclusions.includes(checkRun.conclusion || '');
-            });
-            const unacceptableConclusionChecks = checksToCheck.filter((checkRun) => {
-                return unacceptableConclusions.includes(checkRun.conclusion || '');
-            });
-            core.debug(`acceptableConclusionChecks:   ${acceptableConclusionChecks.map((cr) => cr.name)}`);
-            core.debug(`unacceptableConclusionChecks: ${unacceptableConclusionChecks.map((cr) => cr.name)}`);
-            const isAcceptable = checksToCheck.length == acceptableConclusionChecks.length;
-            const isUnacceptable = unacceptableConclusionChecks.length > 0;
-            core.info(`All Checks are Acceptable:   ${isAcceptable}`);
-            core.info(`Any Checks are Unacceptable: ${isUnacceptable}`);
-            core.endGroup(); // `Computing Check Run Status for PR #${pr.number}...`
-            core.startGroup(`Taking action on PR #${pr.number}`);
-            if (isAcceptable && waitSeconds) {
-                // All checks have passed
-                core.info(`All Check Runs have acceptable conclusions. Waiting for ${parseInt(waitSeconds)} seconds...`);
-                yield (0, wait_1.wait)(parseInt(waitSeconds) * 1000);
-                core.info(`Finished waiting for ${waitSeconds} seconds.`);
-                yield assignAndRequestReviewers(assignees, pr.number, reviewers);
-                // If all checks are acceptable, we only request reviewers and then exit.
-                return;
-            }
-            else if (isUnacceptable) {
-                core.info(`Some check runs have unacceptable conclusions.`);
-                yield assignAndRequestReviewers(assignees, pr.number, reviewers);
-            }
-            else {
-                core.info(`Nothing to do.`);
-            }
-        }
-        catch (error) {
-            core.setFailed(error.message);
-        }
+        core.startGroup(`Getting ${check} to check...`);
+        const allCheckRuns = yield (0, github_1.getCheckRuns)();
+        // Call getRequiredCheckNames() outside the filter so we only make a single API call.
+        const requiredCheckNames = requiredChecksOnly ? yield (0, github_1.getRequiredCheckNames)() : undefined;
+        const checksToCheck = requiredChecksOnly
+            ? allCheckRuns.filter(
+            // If requiredCheckNames is undefined, that means either (1) we could not get the baseRef, or
+            // (2) the particular branch has no required checks.
+            (checkRun) => requiredCheckNames === undefined || requiredCheckNames.includes(checkRun.name))
+            : allCheckRuns;
+        core.info(`${check}s to check:`);
+        core.info(`${'='.repeat(check.length + 16)}`);
+        checksToCheck.forEach((checkRun, index) => {
+            var _a;
+            const idx = String(index).padStart(2, ' ');
+            const status = checkRun.status.padStart(12, ' ');
+            const conclusion = (_a = checkRun.conclusion) === null || _a === void 0 ? void 0 : _a.padStart(16, ' ');
+            core.info(`    - #${idx}) [${status} | ${conclusion}] -> ${checkRun.name} `);
+        });
+        core.endGroup(); // `Getting ${check} to check...`
+        return checksToCheck;
     });
 }
-function assignAndRequestReviewers(assignees, prNumber, reviewers) {
+function computeCheckRunStatus(check, checksToCheck, acceptableConclusions, unacceptableConclusions) {
     return __awaiter(this, void 0, void 0, function* () {
-        if (assignees.length > 0) {
-            yield (0, github_1.setAssignees)(prNumber, assignees);
+        core.startGroup(`Computing ${check} run status...`);
+        const completedChecksToCheck = checksToCheck.filter((checkRun) => checkRun.status === 'completed');
+        core.info(`Found ${completedChecksToCheck.length} completed ${check}s`);
+        const allCompleted = checksToCheck.length == completedChecksToCheck.length;
+        if (!allCompleted) {
+            core.warning(`All ${check} runs have *NOT* completed. Exiting.`);
+            process.exit(0);
+        }
+        core.info(`All ${check} runs have completed.`);
+        const acceptableConclusionChecks = completedChecksToCheck.filter((checkRun) => {
+            return acceptableConclusions.includes(checkRun.conclusion || '');
+        });
+        const unacceptableConclusionChecks = completedChecksToCheck.filter((checkRun) => {
+            return unacceptableConclusions.includes(checkRun.conclusion || '');
+        });
+        core.debug(`acceptableConclusionChecks:   ${acceptableConclusionChecks.map((cr) => cr.name)}`);
+        core.debug(`unacceptableConclusionChecks: ${unacceptableConclusionChecks.map((cr) => cr.name)}`);
+        const acceptable = completedChecksToCheck.length == acceptableConclusionChecks.length;
+        const unacceptable = unacceptableConclusionChecks.length > 0;
+        core.info(`All ${check}s are Acceptable:   ${acceptable}`);
+        core.info(`Any ${check}s are Unacceptable: ${unacceptable}`);
+        core.endGroup(); // `Computing Check Run Status for PR #${pr.number}...`
+        return { acceptable, unacceptable };
+    });
+}
+function takeAction(isAcceptable, delayBeforeRequestingReviews, check, assignees, reviewers, isUnacceptable) {
+    return __awaiter(this, void 0, void 0, function* () {
+        core.startGroup(`Taking action on PR #${(0, github_1.getPr)().number}`);
+        if (isAcceptable && delayBeforeRequestingReviews) {
+            // All checks have passed
+            core.info(`All ${check} runs have acceptable conclusions. Waiting for ${delayBeforeRequestingReviews} seconds...`);
+            yield (0, wait_1.wait)(delayBeforeRequestingReviews * 1000);
+            core.info(`Finished waiting for ${delayBeforeRequestingReviews} seconds.`);
+            yield assignAndRequestReviewers(assignees, reviewers);
+        }
+        else if (isUnacceptable) {
+            core.info(`Some ${check} runs have unacceptable conclusions.`);
+            yield assignAndRequestReviewers(assignees, reviewers);
         }
         else {
-            core.info('Assignees not set. Skipping assignment...');
+            core.info(`Nothing to do.`);
+        }
+        core.endGroup(); // `Taking action on PR #${pr.number}`
+    });
+}
+function assignAndRequestReviewers(assignees, reviewers) {
+    return __awaiter(this, void 0, void 0, function* () {
+        if (assignees.length > 0) {
+            yield (0, github_1.setAssignees)(assignees);
+        }
+        else {
+            core.info('Assignees not set. Skipping PR assignment...');
         }
         if (reviewers.length > 0) {
-            yield (0, github_1.requestReviewers)(prNumber, reviewers);
+            yield (0, github_1.requestReviewers)(reviewers);
         }
         else {
             core.info('Reviewers not set. Skipping requesting review...');
         }
     });
 }
+function run() {
+    return __awaiter(this, void 0, void 0, function* () {
+        try {
+            const { acceptableConclusions, unacceptableConclusions, assignees, reviewers, requiredChecksOnly, delayBeforeRequestingReviews, check, } = gatherInputs();
+            const checksToCheck = yield getChecksToCheck(requiredChecksOnly, check);
+            const { acceptable, unacceptable } = yield computeCheckRunStatus(check, checksToCheck, acceptableConclusions, unacceptableConclusions);
+            yield takeAction(acceptable, delayBeforeRequestingReviews, check, assignees, reviewers, unacceptable);
+        }
+        catch (error) {
+            core.setFailed(error.message);
+            core.endGroup(); // End any lingering groups...
+            process.exit(1);
+        }
+    });
+}
 run().then(() => {
-    core.endGroup(); // `Taking action on PR #${pr.number}`
     core.info('Completed.');
 });
 
@@ -9804,6 +9878,10 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.wait = void 0;
+/**
+ * Wait for the specified number of milliseconds.
+ * @param milliseconds The number of milliseconds to wait.
+ */
 function wait(milliseconds) {
     return __awaiter(this, void 0, void 0, function* () {
         return new Promise((resolve) => {
