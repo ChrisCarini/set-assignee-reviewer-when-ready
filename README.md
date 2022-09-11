@@ -92,7 +92,7 @@ An example using all the available options is below:
         assignees: 'ChrisCarini'            # Assign the PR to `ChrisCarini`
         reviewers: 'ChrisCarini, scalvert'  # Add `ChrisCarini` & `scalvert` as reviewers of the PR
         requiredChecksOnly: 'false'         # This will cause *all* checks on a PR to need to be 'acceptable' for assignment & requesting review to work.
-        waitSeconds: '300'                  # Wait 5 minutes after all acceptable check runs have completed before assigning / requesting reviews.
+        delayBeforeRequestingReviews: '300'                  # Wait 5 minutes after all acceptable check runs have completed before assigning / requesting reviews.
         token: ${{ secrets.REPO_SCOPE_GITHUB_TOKEN }}
 ```
 
