@@ -125,18 +125,23 @@ export async function getRequiredCheckNames(): Promise<string[] | undefined> {
   }
   const { owner, repo } = github.context.repo;
 
-  core.info(`Retrieving branch protection information for ${owner}/${repo}@${baseRef}...`);
-  const result: components['schemas']['status-check-policy'] = (
-    await client.rest.repos.getStatusChecksProtection({
-      owner,
-      repo,
-      branch: baseRef,
-    })
-  ).data;
+  try {
+    core.info(`Retrieving branch protection information for ${owner}/${repo}@${baseRef}...`);
+    const result: components['schemas']['status-check-policy'] = (
+      await client.rest.repos.getStatusChecksProtection({
+        owner,
+        repo,
+        branch: baseRef,
+      })
+    ).data;
 
-  coreDebugJson(result, 'getRequiredChecks() > result');
-
-  return result?.contexts;
+    coreDebugJson(result, 'getRequiredChecks() > result');
+    return result?.contexts;
+  } catch (error: any) {
+    core.warning(error.message);
+    core.warning('Proceeding assuming there are no required checks.');
+    return undefined;
+  }
 }
 
 /**

@@ -9645,14 +9645,21 @@ function getRequiredCheckNames() {
             return undefined;
         }
         const { owner, repo } = github.context.repo;
-        core.info(`Retrieving branch protection information for ${owner}/${repo}@${baseRef}...`);
-        const result = (yield exports.client.rest.repos.getStatusChecksProtection({
-            owner,
-            repo,
-            branch: baseRef,
-        })).data;
-        coreDebugJson(result, 'getRequiredChecks() > result');
-        return result === null || result === void 0 ? void 0 : result.contexts;
+        try {
+            core.info(`Retrieving branch protection information for ${owner}/${repo}@${baseRef}...`);
+            const result = (yield exports.client.rest.repos.getStatusChecksProtection({
+                owner,
+                repo,
+                branch: baseRef,
+            })).data;
+            coreDebugJson(result, 'getRequiredChecks() > result');
+            return result === null || result === void 0 ? void 0 : result.contexts;
+        }
+        catch (error) {
+            core.warning(error.message);
+            core.warning('Proceeding assuming there are no required checks.');
+            return undefined;
+        }
     });
 }
 exports.getRequiredCheckNames = getRequiredCheckNames;
