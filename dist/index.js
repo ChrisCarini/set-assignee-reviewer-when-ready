@@ -9583,13 +9583,20 @@ function requestReviewers(reviewers) {
     return __awaiter(this, void 0, void 0, function* () {
         const pr = (yield getPr()).number;
         core.info(`Requesting Reviewers for PR #${pr} to: ${reviewers.join(',')}`);
-        const response = yield exports.client.rest.pulls.requestReviewers({
-            owner: github.context.repo.owner,
-            repo: github.context.repo.repo,
-            pull_number: pr,
-            reviewers,
-        });
-        coreDebugJson(response, `requestReviewers(${pr}, [${reviewers.join(',')}]) > response`);
+        const { owner, repo } = github.context.repo;
+        try {
+            const response = yield exports.client.rest.pulls.requestReviewers({
+                owner,
+                repo,
+                pull_number: pr,
+                reviewers,
+            });
+            coreDebugJson(response, `requestReviewers(${pr}, [${reviewers.join(',')}]) > response`);
+        }
+        catch (error) {
+            core.warning(`Error requesting reviewer(s) on PR #${pr} to: [${reviewers.join(',')}]`);
+            core.warning(error.message);
+        }
     });
 }
 exports.requestReviewers = requestReviewers;
@@ -9603,13 +9610,19 @@ function setAssignees(assignees) {
         const pr = (yield getPr()).number;
         core.info(`Setting Assignees for PR #${pr} to: ${assignees.join(',')}`);
         const { owner, repo } = github.context.repo;
-        const response = yield exports.client.rest.issues.addAssignees({
-            owner,
-            repo,
-            issue_number: pr,
-            assignees: assignees,
-        });
-        coreDebugJson(response, `setAssignees(${pr}, [${assignees.join(',')}]) > response`);
+        try {
+            const response = yield exports.client.rest.issues.addAssignees({
+                owner,
+                repo,
+                issue_number: pr,
+                assignees,
+            });
+            coreDebugJson(response, `setAssignees(${pr}, [${assignees.join(',')}]) > response`);
+        }
+        catch (error) {
+            core.warning(`Error assigning PR #${pr} to: [${assignees.join(',')}]`);
+            core.warning(error.message);
+        }
     });
 }
 exports.setAssignees = setAssignees;
