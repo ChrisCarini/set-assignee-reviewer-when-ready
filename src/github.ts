@@ -37,10 +37,11 @@ async function fetchPr(): Promise<MinimalPR> {
   // of the workflow_run. Grab the most recently updated PRs, and search for a matching
   // PR title.
   const workflowRunDisplayTitle = github.context.payload.workflow_run.display_title;
+  const { owner, repo } = github.context.repo;
   const pulls = (
     await client.rest.pulls.list({
-      owner: github.context.repo.owner,
-      repo: github.context.repo.repo,
+      owner,
+      repo,
       state: 'all',
       sort: 'updated',
     })
@@ -98,6 +99,20 @@ export async function setAssignees(assignees: string[]): Promise<void> {
     core.warning(`Error assigning PR #${pr} to: [${assignees.join(',')}]`);
     core.warning(error.message);
   }
+}
+
+/**
+ * Check if the provided pull request is still open.
+ * @param pr The PR number to check.
+ */
+export async function isPrOpen(pr: number): Promise<boolean> {
+  const { owner, repo } = github.context.repo;
+  const { data: pullRequest } = await client.rest.pulls.get({
+    owner,
+    repo,
+    pull_number: pr,
+  });
+  return pullRequest.state === 'open';
 }
 
 /**

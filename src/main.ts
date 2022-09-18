@@ -9,6 +9,7 @@ import {
   getInputWithDefault,
   getPr,
   getRequiredCheckNames,
+  isPrOpen,
   requestReviewers,
   setAssignees,
 } from './github';
@@ -145,13 +146,21 @@ async function takeAction(
   reviewers: string[],
   isUnacceptable: boolean
 ) {
-  core.startGroup(`Taking action on PR #${(await getPr()).number}`);
+  const prNumber = (await getPr()).number;
+  core.startGroup(`Taking action on PR #${prNumber}`);
   if (isAcceptable && delayBeforeRequestingReviews) {
     // All checks have passed
     core.info(`All ${check} runs have acceptable conclusions. Waiting for ${delayBeforeRequestingReviews} seconds...`);
     await wait(delayBeforeRequestingReviews * 1000);
     core.info(`Finished waiting for ${delayBeforeRequestingReviews} seconds.`);
-    await assignAndRequestReviewers(assignees, reviewers);
+
+    const isOpen = await isPrOpen(prNumber);
+    if (isOpen) {
+      core.info(`PR #${prNumber} is still open. Skipping assigning / requesting reviews.`);
+      await assignAndRequestReviewers(assignees, reviewers);
+    } else {
+      core.info(`PR #${prNumber} is no longer open. Skipping assigning / requesting reviews.`);
+    }
   } else if (isUnacceptable) {
     core.info(`Some ${check} runs have unacceptable conclusions.`);
     await assignAndRequestReviewers(assignees, reviewers);

@@ -9525,7 +9525,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.coreDebugJson = exports.getInputWithDefault = exports.getInputArray = exports.getRequiredCheckNames = exports.getCheckRuns = exports.setAssignees = exports.requestReviewers = exports.getPr = exports.client = void 0;
+exports.coreDebugJson = exports.getInputWithDefault = exports.getInputArray = exports.getRequiredCheckNames = exports.getCheckRuns = exports.isPrOpen = exports.setAssignees = exports.requestReviewers = exports.getPr = exports.client = void 0;
 const github = __importStar(__nccwpck_require__(5438));
 const core = __importStar(__nccwpck_require__(2186));
 const token = core.getInput('token', { required: true });
@@ -9560,9 +9560,10 @@ function fetchPr() {
         // of the workflow_run. Grab the most recently updated PRs, and search for a matching
         // PR title.
         const workflowRunDisplayTitle = github.context.payload.workflow_run.display_title;
+        const { owner, repo } = github.context.repo;
         const pulls = (yield exports.client.rest.pulls.list({
-            owner: github.context.repo.owner,
-            repo: github.context.repo.repo,
+            owner,
+            repo,
             state: 'all',
             sort: 'updated',
         })).data;
@@ -9626,6 +9627,22 @@ function setAssignees(assignees) {
     });
 }
 exports.setAssignees = setAssignees;
+/**
+ * Check if the provided pull request is still open.
+ * @param pr The PR number to check.
+ */
+function isPrOpen(pr) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const { owner, repo } = github.context.repo;
+        const { data: pullRequest } = yield exports.client.rest.pulls.get({
+            owner,
+            repo,
+            pull_number: pr,
+        });
+        return pullRequest.state === 'open';
+    });
+}
+exports.isPrOpen = isPrOpen;
 /**
  * Get the checkruns for the current context's workflow_run for the head SHA.
  */
@@ -9862,13 +9879,21 @@ function computeCheckRunStatus(check, checksToCheck, acceptableConclusions, unac
 }
 function takeAction(isAcceptable, delayBeforeRequestingReviews, check, assignees, reviewers, isUnacceptable) {
     return __awaiter(this, void 0, void 0, function* () {
-        core.startGroup(`Taking action on PR #${(yield (0, github_1.getPr)()).number}`);
+        const prNumber = (yield (0, github_1.getPr)()).number;
+        core.startGroup(`Taking action on PR #${prNumber}`);
         if (isAcceptable && delayBeforeRequestingReviews) {
             // All checks have passed
             core.info(`All ${check} runs have acceptable conclusions. Waiting for ${delayBeforeRequestingReviews} seconds...`);
             yield (0, wait_1.wait)(delayBeforeRequestingReviews * 1000);
             core.info(`Finished waiting for ${delayBeforeRequestingReviews} seconds.`);
-            yield assignAndRequestReviewers(assignees, reviewers);
+            const isOpen = yield (0, github_1.isPrOpen)(prNumber);
+            if (isOpen) {
+                core.info(`PR #${prNumber} is still open. Skipping assigning / requesting reviews.`);
+                yield assignAndRequestReviewers(assignees, reviewers);
+            }
+            else {
+                core.info(`PR #${prNumber} is no longer open. Skipping assigning / requesting reviews.`);
+            }
         }
         else if (isUnacceptable) {
             core.info(`Some ${check} runs have unacceptable conclusions.`);
