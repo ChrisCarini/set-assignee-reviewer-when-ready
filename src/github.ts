@@ -47,8 +47,10 @@ async function fetchPr(): Promise<MinimalPR> {
     repo,
     state: 'all',
     sort: 'updated',
+    direction: 'desc',
   });
   const pullRequests = pulls.filter((pull) => pull.title == workflowRunDisplayTitle);
+  coreDebugJson(pullRequests, 'fetchPr() > pullRequests');
   if (pullRequests !== undefined && pullRequests.length >= 1) {
     return pullRequests[0];
   }
