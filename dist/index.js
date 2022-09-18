@@ -9525,31 +9525,65 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.coreDebugJson = exports.getInputWithDefault = exports.getInputArray = exports.getRequiredCheckNames = exports.getCheckRuns = exports.setAssignees = exports.requestReviewers = exports.getPr = void 0;
+exports.coreDebugJson = exports.getInputWithDefault = exports.getInputArray = exports.getRequiredCheckNames = exports.getCheckRuns = exports.setAssignees = exports.requestReviewers = exports.getPr = exports.client = void 0;
 const github = __importStar(__nccwpck_require__(5438));
 const core = __importStar(__nccwpck_require__(2186));
 const token = core.getInput('token', { required: true });
-const client = github.getOctokit(token);
+exports.client = github.getOctokit(token);
+/**
+ * Cache for PR.
+ */
+let prNumber = null;
 /**
  * Get the current context's PR information
  */
 function getPr() {
-    const pullRequest = github.context.payload.workflow_run.pull_requests[0];
-    if (pullRequest === undefined) {
-        throw new Error(`NO PR FOUND IN CONTEXT (github.content.payload.workflow_run.pull_requests[0]):`);
-    }
-    return pullRequest;
+    return __awaiter(this, void 0, void 0, function* () {
+        if (prNumber === null) {
+            prNumber = yield fetchPr();
+        }
+        return prNumber;
+    });
 }
 exports.getPr = getPr;
+/**
+ * Fetch PR information; extracted as this can yield an API call.
+ */
+function fetchPr() {
+    return __awaiter(this, void 0, void 0, function* () {
+        let pullRequest = github.context.payload.workflow_run.pull_requests[0];
+        if (pullRequest !== undefined) {
+            return pullRequest;
+        }
+        // It is possible that the `workflow_run` object has an empty `pull_requests` array.
+        // So, we need to go hunting for the associated pull request based on the display title
+        // of the workflow_run. Grab the most recently updated PRs, and search for a matching
+        // PR title.
+        const workflowRunDisplayTitle = github.context.payload.workflow_run.display_title;
+        const pulls = (yield exports.client.rest.pulls.list({
+            owner: github.context.repo.owner,
+            repo: github.context.repo.repo,
+            state: 'all',
+            sort: 'updated',
+        })).data;
+        pullRequest = pulls.filter((pull) => {
+            return pull.title == workflowRunDisplayTitle;
+        });
+        if (pullRequest !== undefined) {
+            return pullRequest;
+        }
+        throw new Error(`NO PR FOUND IN CONTEXT (github.content.payload.workflow_run.pull_requests[0]):`);
+    });
+}
 /**
  * Request reviews on the current context's PR from the specified reviewers.
  * @param reviewers The list of reviewers to request a review.
  */
 function requestReviewers(reviewers) {
     return __awaiter(this, void 0, void 0, function* () {
-        const pr = getPr().number;
+        const pr = (yield getPr()).number;
         core.info(`Requesting Reviewers for PR #${pr} to: ${reviewers.join(',')}`);
-        const response = yield client.rest.pulls.requestReviewers({
+        const response = yield exports.client.rest.pulls.requestReviewers({
             owner: github.context.repo.owner,
             repo: github.context.repo.repo,
             pull_number: pr,
@@ -9566,10 +9600,10 @@ exports.requestReviewers = requestReviewers;
  */
 function setAssignees(assignees) {
     return __awaiter(this, void 0, void 0, function* () {
-        const pr = getPr().number;
+        const pr = (yield getPr()).number;
         core.info(`Setting Assignees for PR #${pr} to: ${assignees.join(',')}`);
         const { owner, repo } = github.context.repo;
-        const response = yield client.rest.issues.addAssignees({
+        const response = yield exports.client.rest.issues.addAssignees({
             owner,
             repo,
             issue_number: pr,
@@ -9587,7 +9621,7 @@ function getCheckRuns() {
         const ref = github.context.payload.workflow_run.head_sha;
         const { owner, repo } = github.context.repo;
         core.info(`Retrieving check runs for ${owner}/${repo}@${ref}...`);
-        const checkRuns = (yield client.rest.checks.listForRef({
+        const checkRuns = (yield exports.client.rest.checks.listForRef({
             owner,
             repo,
             ref,
@@ -9604,15 +9638,15 @@ exports.getCheckRuns = getCheckRuns;
 function getRequiredCheckNames() {
     var _a, _b;
     return __awaiter(this, void 0, void 0, function* () {
-        const baseRef = (_a = getPr()) === null || _a === void 0 ? void 0 : _a.base.ref;
+        const baseRef = (_a = (yield getPr())) === null || _a === void 0 ? void 0 : _a.base.ref;
         core.info(`Base Ref: ${baseRef}`);
         if (baseRef === undefined) {
-            core.error(`Error getting base ref for PR #${(_b = getPr()) === null || _b === void 0 ? void 0 : _b.number}.`);
+            core.error(`Error getting base ref for PR #${(_b = (yield getPr())) === null || _b === void 0 ? void 0 : _b.number}.`);
             return undefined;
         }
         const { owner, repo } = github.context.repo;
         core.info(`Retrieving branch protection information for ${owner}/${repo}@${baseRef}...`);
-        const result = (yield client.rest.repos.getStatusChecksProtection({
+        const result = (yield exports.client.rest.repos.getStatusChecksProtection({
             owner,
             repo,
             branch: baseRef,
@@ -9721,36 +9755,38 @@ const ALL_VALID_CHECK_CONCLUSIONS = [
  * Gather all the inputs from the user workflow file.
  */
 function gatherInputs() {
-    core.startGroup('Gathering inputs...');
-    (0, github_1.coreDebugJson)(github.context, 'github.context');
-    const pr = (0, github_1.getPr)();
-    core.info(`PR #: ${pr.number}`);
-    const acceptableConclusions = (0, github_1.getInputArray)('acceptableConclusions', ALL_VALID_CHECK_CONCLUSIONS);
-    const unacceptableConclusions = (0, github_1.getInputArray)('unacceptableConclusions', []);
-    const assignees = (0, github_1.getInputArray)('assignees', []);
-    const reviewers = (0, github_1.getInputArray)('reviewers', []);
-    const requiredChecksOnly = (0, github_1.getInputWithDefault)('requiredChecksOnly', 'true') === 'true';
-    const delayBeforeRequestingReviews = parseInt((0, github_1.getInputWithDefault)('delayBeforeRequestingReviews', '0'));
-    const check = requiredChecksOnly ? 'required check' : 'check';
-    core.debug('Inputs:');
-    core.debug('=======');
-    core.debug(`acceptableConclusions:        ${acceptableConclusions}`);
-    core.debug(`unacceptableConclusions:      ${unacceptableConclusions}`);
-    core.debug(`assignees:                    ${assignees}`);
-    core.debug(`reviewers:                    ${reviewers}`);
-    core.debug(`requiredChecksOnly:           ${requiredChecksOnly}`);
-    core.debug(`delayBeforeRequestingReviews: ${delayBeforeRequestingReviews}`);
-    core.debug('');
-    core.endGroup(); // Gathering inputs...
-    return {
-        acceptableConclusions,
-        unacceptableConclusions,
-        assignees,
-        reviewers,
-        requiredChecksOnly,
-        delayBeforeRequestingReviews,
-        check,
-    };
+    return __awaiter(this, void 0, void 0, function* () {
+        core.startGroup('Gathering inputs...');
+        (0, github_1.coreDebugJson)(github.context, 'github.context');
+        const pr = yield (0, github_1.getPr)();
+        core.info(`PR #: ${pr.number}`);
+        const acceptableConclusions = (0, github_1.getInputArray)('acceptableConclusions', ALL_VALID_CHECK_CONCLUSIONS);
+        const unacceptableConclusions = (0, github_1.getInputArray)('unacceptableConclusions', []);
+        const assignees = (0, github_1.getInputArray)('assignees', []);
+        const reviewers = (0, github_1.getInputArray)('reviewers', []);
+        const requiredChecksOnly = (0, github_1.getInputWithDefault)('requiredChecksOnly', 'true') === 'true';
+        const delayBeforeRequestingReviews = parseInt((0, github_1.getInputWithDefault)('delayBeforeRequestingReviews', '0'));
+        const check = requiredChecksOnly ? 'required check' : 'check';
+        core.debug('Inputs:');
+        core.debug('=======');
+        core.debug(`acceptableConclusions:        ${acceptableConclusions}`);
+        core.debug(`unacceptableConclusions:      ${unacceptableConclusions}`);
+        core.debug(`assignees:                    ${assignees}`);
+        core.debug(`reviewers:                    ${reviewers}`);
+        core.debug(`requiredChecksOnly:           ${requiredChecksOnly}`);
+        core.debug(`delayBeforeRequestingReviews: ${delayBeforeRequestingReviews}`);
+        core.debug('');
+        core.endGroup(); // Gathering inputs...
+        return {
+            acceptableConclusions,
+            unacceptableConclusions,
+            assignees,
+            reviewers,
+            requiredChecksOnly,
+            delayBeforeRequestingReviews,
+            check,
+        };
+    });
 }
 function getChecksToCheck(requiredChecksOnly, check) {
     return __awaiter(this, void 0, void 0, function* () {
@@ -9806,7 +9842,7 @@ function computeCheckRunStatus(check, checksToCheck, acceptableConclusions, unac
 }
 function takeAction(isAcceptable, delayBeforeRequestingReviews, check, assignees, reviewers, isUnacceptable) {
     return __awaiter(this, void 0, void 0, function* () {
-        core.startGroup(`Taking action on PR #${(0, github_1.getPr)().number}`);
+        core.startGroup(`Taking action on PR #${(yield (0, github_1.getPr)()).number}`);
         if (isAcceptable && delayBeforeRequestingReviews) {
             // All checks have passed
             core.info(`All ${check} runs have acceptable conclusions. Waiting for ${delayBeforeRequestingReviews} seconds...`);
@@ -9843,7 +9879,7 @@ function assignAndRequestReviewers(assignees, reviewers) {
 function run() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
-            const { acceptableConclusions, unacceptableConclusions, assignees, reviewers, requiredChecksOnly, delayBeforeRequestingReviews, check, } = gatherInputs();
+            const { acceptableConclusions, unacceptableConclusions, assignees, reviewers, requiredChecksOnly, delayBeforeRequestingReviews, check, } = yield gatherInputs();
             const checksToCheck = yield getChecksToCheck(requiredChecksOnly, check);
             const { acceptable, unacceptable } = yield computeCheckRunStatus(check, checksToCheck, acceptableConclusions, unacceptableConclusions);
             yield takeAction(acceptable, delayBeforeRequestingReviews, check, assignees, reviewers, unacceptable);

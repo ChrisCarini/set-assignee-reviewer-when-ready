@@ -36,11 +36,11 @@ type UserInputs = {
 /**
  * Gather all the inputs from the user workflow file.
  */
-function gatherInputs(): UserInputs {
+async function gatherInputs(): Promise<UserInputs> {
   core.startGroup('Gathering inputs...');
   coreDebugJson(github.context, 'github.context');
 
-  const pr = getPr();
+  const pr = await getPr();
   core.info(`PR #: ${pr.number}`);
 
   const acceptableConclusions = getInputArray('acceptableConclusions', ALL_VALID_CHECK_CONCLUSIONS);
@@ -145,7 +145,7 @@ async function takeAction(
   reviewers: string[],
   isUnacceptable: boolean
 ) {
-  core.startGroup(`Taking action on PR #${getPr().number}`);
+  core.startGroup(`Taking action on PR #${(await getPr()).number}`);
   if (isAcceptable && delayBeforeRequestingReviews) {
     // All checks have passed
     core.info(`All ${check} runs have acceptable conclusions. Waiting for ${delayBeforeRequestingReviews} seconds...`);
@@ -184,7 +184,7 @@ async function run(): Promise<void> {
       requiredChecksOnly,
       delayBeforeRequestingReviews,
       check,
-    } = gatherInputs();
+    } = await gatherInputs();
 
     const checksToCheck = await getChecksToCheck(requiredChecksOnly, check);
 

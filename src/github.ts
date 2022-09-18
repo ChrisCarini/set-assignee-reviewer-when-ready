@@ -3,20 +3,56 @@ import * as core from '@actions/core';
 import { components } from '@octokit/openapi-types';
 
 export type CheckRun = components['schemas']['check-run'];
+type MinimalPR = components['schemas']['pull-request-minimal'];
 
 const token = core.getInput('token', { required: true });
-const client = github.getOctokit(token);
+export const client = github.getOctokit(token);
+
+/**
+ * Cache for PR.
+ */
+let prNumber: MinimalPR | null = null;
 
 /**
  * Get the current context's PR information
  */
-export function getPr(): components['schemas']['pull-request-minimal'] {
-  const pullRequest = github.context.payload.workflow_run.pull_requests[0];
-  if (pullRequest === undefined) {
-    throw new Error(`NO PR FOUND IN CONTEXT (github.content.payload.workflow_run.pull_requests[0]):`);
+export async function getPr(): Promise<MinimalPR> {
+  if (prNumber === null) {
+    prNumber = await fetchPr();
+  }
+  return prNumber;
+}
+
+/**
+ * Fetch PR information; extracted as this can yield an API call.
+ */
+async function fetchPr(): Promise<MinimalPR> {
+  let pullRequest = github.context.payload.workflow_run.pull_requests[0];
+  if (pullRequest !== undefined) {
+    return pullRequest;
   }
 
-  return pullRequest;
+  // It is possible that the `workflow_run` object has an empty `pull_requests` array.
+  // So, we need to go hunting for the associated pull request based on the display title
+  // of the workflow_run. Grab the most recently updated PRs, and search for a matching
+  // PR title.
+  const workflowRunDisplayTitle = github.context.payload.workflow_run.display_title;
+  const pulls = (
+    await client.rest.pulls.list({
+      owner: github.context.repo.owner,
+      repo: github.context.repo.repo,
+      state: 'all',
+      sort: 'updated',
+    })
+  ).data;
+  pullRequest = pulls.filter((pull) => {
+    return pull.title == workflowRunDisplayTitle;
+  });
+  if (pullRequest !== undefined) {
+    return pullRequest;
+  }
+
+  throw new Error(`NO PR FOUND IN CONTEXT (github.content.payload.workflow_run.pull_requests[0]):`);
 }
 
 /**
@@ -24,7 +60,7 @@ export function getPr(): components['schemas']['pull-request-minimal'] {
  * @param reviewers The list of reviewers to request a review.
  */
 export async function requestReviewers(reviewers: string[]): Promise<void> {
-  const pr = getPr().number;
+  const pr = (await getPr()).number;
   core.info(`Requesting Reviewers for PR #${pr} to: ${reviewers.join(',')}`);
 
   const response = await client.rest.pulls.requestReviewers({
@@ -42,7 +78,7 @@ export async function requestReviewers(reviewers: string[]): Promise<void> {
  * @param assignees The list of assignees to assign the PR.
  */
 export async function setAssignees(assignees: string[]): Promise<void> {
-  const pr = getPr().number;
+  const pr = (await getPr()).number;
   core.info(`Setting Assignees for PR #${pr} to: ${assignees.join(',')}`);
   const { owner, repo } = github.context.repo;
 
@@ -81,10 +117,10 @@ export async function getCheckRuns(): Promise<CheckRun[]> {
  * Get the required checks for the base ref.
  */
 export async function getRequiredCheckNames(): Promise<string[] | undefined> {
-  const baseRef = getPr()?.base.ref;
+  const baseRef = (await getPr())?.base.ref;
   core.info(`Base Ref: ${baseRef}`);
   if (baseRef === undefined) {
-    core.error(`Error getting base ref for PR #${getPr()?.number}.`);
+    core.error(`Error getting base ref for PR #${(await getPr())?.number}.`);
     return undefined;
   }
   const { owner, repo } = github.context.repo;
