@@ -1,11 +1,44 @@
-name: 'Your name here'
-description: 'Provide a description here'
-author: 'Your name or organization here'
+name: 'Set Assignee Reviewer when Ready'
+description: 'A GitHub action to set assignee(s) or reviewer(s) when a PR has finished all checks.'
+author: 'Chris Carini'
+
+branding:
+  icon: 'check-circle'
+  color: 'green'
+
 inputs:
-  milliseconds: # change this
+  token:
+    description: 'The GitHub token to use for making API requests.'
     required: true
-    description: 'input description here'
-    default: 'default value if applicable'
+
+  acceptableConclusions:
+    description: 'The acceptable conclusion for each check run that has completed. Defaults to `success, neutral, cancelled, skipped`.'
+    required: false
+    default: 'success, neutral, cancelled, skipped'
+  unacceptableConclusions:
+    description: 'The unacceptable conclusion for each check run that has completed. Defaults to `failure, timed_out, action_required`.'
+    required: false
+    default: 'failure, timed_out, action_required'
+
+  assignees:
+    description: 'List of assignees to assign the PR to. Defaults to no one.'
+    required: false
+    default: ''
+  reviewers:
+    description: 'List of reviewers to request reviews on the PR. Defaults to no one.'
+    required: false
+    default: ''
+
+  requiredChecksOnly:
+    description: 'Only consider `required checks`. Defaults to true.'
+    required: false
+    default: 'true'
+
+  delayBeforeRequestingReviews:
+    description: 'If all checks having acceptable conclusions, wait N seconds before requesting reviewers on the PR. Defaults to `0` which disables requesting reviewers on PRs with acceptable checks.'
+    required: false
+    default: '0'
+
 runs:
   using: 'node16'
   main: 'dist/index.js'

@@ -1,0 +1,28 @@
+name: 'Sample GitHub Workflow for "Set Assignee Reviewer when Ready" action'
+on:
+  workflow_run:
+    workflows:
+      - "checks for testing (2sec & 4sec)"
+      - "checks for testing failure (3sec & 5sec)"
+    types:
+      - completed
+
+jobs:
+  set_assignee_reviewers:
+    name: "Set Assignee and Reviewer when Checks Ready"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set Assignee and Reviewer when Checks Ready
+        uses: ChrisCarini/set-assignee-reviewer-when-ready@main
+
+        with:
+          acceptableConclusions: 'success'
+          unacceptableConclusions: 'failure'
+
+          assignees: 'ChrisCarini'
+          reviewers: 'ChrisCarini'
+
+          requiredChecksOnly: 'true'
+          waitSeconds: 10
+
+          token: ${{ secrets.REPO_SCOPE_GITHUB_TOKEN }}

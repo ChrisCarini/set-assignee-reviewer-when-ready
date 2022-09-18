@@ -1,0 +1,23 @@
+#name: Auto approve
+#
+#on:
+#  pull_request:
+#
+#  workflow_dispatch:
+#
+#jobs:
+#  auto-approve:
+#    runs-on: ubuntu-latest
+#    permissions:
+#      pull-requests: write
+#    steps:
+#
+#      - name: Print Actor
+#        shell: bash
+#        run: |
+#          echo ${{ github.actor }}
+#
+#      - uses: hmarr/auto-approve-action@v2
+#        if: github.actor == 'ChrisCarini'
+#        with:
+#          github-token: ${{ secrets.GITHUB_TOKEN }}

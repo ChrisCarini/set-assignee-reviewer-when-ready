@@ -1,9 +1,12 @@
+/**
+ * Wait for the specified number of milliseconds.
+ * @param milliseconds The number of milliseconds to wait.
+ */
 export async function wait(milliseconds: number): Promise<string> {
-  return new Promise(resolve => {
+  return new Promise((resolve) => {
     if (isNaN(milliseconds)) {
-      throw new Error('milliseconds not a number')
+      throw new Error('milliseconds not a number');
     }
-
-    setTimeout(() => resolve('done!'), milliseconds)
-  })
+    setTimeout(() => resolve('done!'), milliseconds);
+  });
 }
