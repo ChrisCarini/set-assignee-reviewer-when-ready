@@ -23,6 +23,6 @@ jobs:
           reviewers: 'ChrisCarini'
 
           requiredChecksOnly: 'true'
-          waitSeconds: 10
+          delayBeforeRequestingReviews: 10
 
           token: ${{ secrets.REPO_SCOPE_GITHUB_TOKEN }}
