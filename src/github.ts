@@ -18,7 +18,10 @@ let prNumber: MinimalPR | null = null;
  */
 export async function getPr(): Promise<MinimalPR> {
   if (prNumber === null) {
+    core.debug('PR Number not yet set; fetching...');
     prNumber = await fetchPr();
+  } else {
+    core.debug(`PR Number already set; reusing PR #${prNumber}.`);
   }
   return prNumber;
 }
@@ -27,8 +30,9 @@ export async function getPr(): Promise<MinimalPR> {
  * Fetch PR information; extracted as this can yield an API call.
  */
 async function fetchPr(): Promise<MinimalPR> {
-  let pullRequest = github.context.payload.workflow_run.pull_requests[0];
+  const pullRequest = github.context.payload.workflow_run.pull_requests[0];
   if (pullRequest !== undefined) {
+    core.debug(`github.context.payload.workflow_run.pull_requests[0] !== undefined : Using PR #${pullRequest}.`);
     return pullRequest;
   }
 
@@ -38,22 +42,20 @@ async function fetchPr(): Promise<MinimalPR> {
   // PR title.
   const workflowRunDisplayTitle = github.context.payload.workflow_run.display_title;
   const { owner, repo } = github.context.repo;
-  const pulls = (
-    await client.rest.pulls.list({
-      owner,
-      repo,
-      state: 'all',
-      sort: 'updated',
-    })
-  ).data;
-  pullRequest = pulls.filter((pull) => {
-    return pull.title == workflowRunDisplayTitle;
+  const { data: pulls } = await client.rest.pulls.list({
+    owner,
+    repo,
+    state: 'all',
+    sort: 'updated',
   });
-  if (pullRequest !== undefined) {
-    return pullRequest;
+  const pullRequests = pulls.filter((pull) => pull.title == workflowRunDisplayTitle);
+  if (pullRequests !== undefined && pullRequests.length >= 1) {
+    return pullRequests[0];
   }
 
-  throw new Error(`NO PR FOUND IN CONTEXT (github.content.payload.workflow_run.pull_requests[0]):`);
+  throw new Error(
+    `NO PR FOUND (Searched in 'github.content.payload.workflow_run.pull_requests[0]' and searched for title: ${workflowRunDisplayTitle})`
+  );
 }
 
 /**

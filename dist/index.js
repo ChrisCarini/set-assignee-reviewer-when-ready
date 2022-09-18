@@ -9540,7 +9540,11 @@ let prNumber = null;
 function getPr() {
     return __awaiter(this, void 0, void 0, function* () {
         if (prNumber === null) {
+            core.debug('PR Number not yet set; fetching...');
             prNumber = yield fetchPr();
+        }
+        else {
+            core.debug(`PR Number already set; reusing PR #${prNumber}.`);
         }
         return prNumber;
     });
@@ -9551,8 +9555,9 @@ exports.getPr = getPr;
  */
 function fetchPr() {
     return __awaiter(this, void 0, void 0, function* () {
-        let pullRequest = github.context.payload.workflow_run.pull_requests[0];
+        const pullRequest = github.context.payload.workflow_run.pull_requests[0];
         if (pullRequest !== undefined) {
+            core.debug(`github.context.payload.workflow_run.pull_requests[0] !== undefined : Using PR #${pullRequest}.`);
             return pullRequest;
         }
         // It is possible that the `workflow_run` object has an empty `pull_requests` array.
@@ -9561,19 +9566,17 @@ function fetchPr() {
         // PR title.
         const workflowRunDisplayTitle = github.context.payload.workflow_run.display_title;
         const { owner, repo } = github.context.repo;
-        const pulls = (yield exports.client.rest.pulls.list({
+        const { data: pulls } = yield exports.client.rest.pulls.list({
             owner,
             repo,
             state: 'all',
             sort: 'updated',
-        })).data;
-        pullRequest = pulls.filter((pull) => {
-            return pull.title == workflowRunDisplayTitle;
         });
-        if (pullRequest !== undefined) {
-            return pullRequest;
+        const pullRequests = pulls.filter((pull) => pull.title == workflowRunDisplayTitle);
+        if (pullRequests !== undefined && pullRequests.length >= 1) {
+            return pullRequests[0];
         }
-        throw new Error(`NO PR FOUND IN CONTEXT (github.content.payload.workflow_run.pull_requests[0]):`);
+        throw new Error(`NO PR FOUND (Searched in 'github.content.payload.workflow_run.pull_requests[0]' and searched for title: ${workflowRunDisplayTitle})`);
     });
 }
 /**
