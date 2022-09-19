@@ -77,8 +77,7 @@ export async function requestReviewers(reviewers: string[]): Promise<void> {
     });
     coreDebugJson(response, `requestReviewers(${pr}, [${reviewers.join(',')}]) > response`);
   } catch (error: any) {
-    core.warning(`Error requesting reviewer(s) on PR #${pr} to: [${reviewers.join(',')}]`);
-    core.warning(error.message);
+    core.warning(`[${error.message}] Error requesting reviewer(s) on PR #${pr} to: [${reviewers.join(',')}]`);
   }
 }
 
@@ -100,8 +99,7 @@ export async function setAssignees(assignees: string[]): Promise<void> {
     });
     coreDebugJson(response, `setAssignees(${pr}, [${assignees.join(',')}]) > response`);
   } catch (error: any) {
-    core.warning(`Error assigning PR #${pr} to: [${assignees.join(',')}]`);
-    core.warning(error.message);
+    core.warning(`[${error.message}] Error assigning PR #${pr} to: [${assignees.join(',')}]`);
   }
 }
 
@@ -155,19 +153,17 @@ export async function getRequiredCheckNames(): Promise<string[] | undefined> {
 
   try {
     core.info(`Retrieving branch protection information for ${owner}/${repo}@${baseRef}...`);
-    const result: components['schemas']['status-check-policy'] = (
+    const { data: result }: { data: components['schemas']['status-check-policy'] } =
       await client.rest.repos.getStatusChecksProtection({
         owner,
         repo,
         branch: baseRef,
-      })
-    ).data;
+      });
 
     coreDebugJson(result, 'getRequiredChecks() > result');
     return result?.contexts;
   } catch (error: any) {
-    core.warning(error.message);
-    core.warning('Proceeding assuming there are no required checks.');
+    core.warning(`[${error.message}] Proceeding assuming there are no required checks.`);
     return undefined;
   }
 }

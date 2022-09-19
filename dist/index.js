@@ -9600,8 +9600,7 @@ function requestReviewers(reviewers) {
             coreDebugJson(response, `requestReviewers(${pr}, [${reviewers.join(',')}]) > response`);
         }
         catch (error) {
-            core.warning(`Error requesting reviewer(s) on PR #${pr} to: [${reviewers.join(',')}]`);
-            core.warning(error.message);
+            core.warning(`[${error.message}] Error requesting reviewer(s) on PR #${pr} to: [${reviewers.join(',')}]`);
         }
     });
 }
@@ -9626,8 +9625,7 @@ function setAssignees(assignees) {
             coreDebugJson(response, `setAssignees(${pr}, [${assignees.join(',')}]) > response`);
         }
         catch (error) {
-            core.warning(`Error assigning PR #${pr} to: [${assignees.join(',')}]`);
-            core.warning(error.message);
+            core.warning(`[${error.message}] Error assigning PR #${pr} to: [${assignees.join(',')}]`);
         }
     });
 }
@@ -9682,17 +9680,16 @@ function getRequiredCheckNames() {
         const { owner, repo } = github.context.repo;
         try {
             core.info(`Retrieving branch protection information for ${owner}/${repo}@${baseRef}...`);
-            const result = (yield exports.client.rest.repos.getStatusChecksProtection({
+            const { data: result } = yield exports.client.rest.repos.getStatusChecksProtection({
                 owner,
                 repo,
                 branch: baseRef,
-            })).data;
+            });
             coreDebugJson(result, 'getRequiredChecks() > result');
             return result === null || result === void 0 ? void 0 : result.contexts;
         }
         catch (error) {
-            core.warning(error.message);
-            core.warning('Proceeding assuming there are no required checks.');
+            core.warning(`[${error.message}] Proceeding assuming there are no required checks.`);
             return undefined;
         }
     });
