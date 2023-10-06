@@ -11,7 +11,7 @@ jobs:
     steps:
 
       - name: Fetch Sources
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Sleep 2sec
         shell: bash
@@ -24,7 +24,7 @@ jobs:
     steps:
 
       - name: Fetch Sources
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Sleep 4sec
         shell: bash
