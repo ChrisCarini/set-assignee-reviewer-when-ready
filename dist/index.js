@@ -10069,6 +10069,7 @@ function assignAndRequestReviewers(assignees, reviewers) {
 }
 function run() {
     return __awaiter(this, void 0, void 0, function* () {
+        core.info('Starting...');
         try {
             const { acceptableConclusions, unacceptableConclusions, assignees, reviewers, requiredChecksOnly, delayBeforeRequestingReviews, check, } = yield gatherInputs();
             const checksToCheck = yield getChecksToCheck(requiredChecksOnly, check);
