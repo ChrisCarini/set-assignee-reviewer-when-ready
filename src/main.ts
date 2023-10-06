@@ -184,6 +184,7 @@ async function assignAndRequestReviewers(assignees: string[], reviewers: string[
 }
 
 async function run(): Promise<void> {
+  core.info('Starting...');
   try {
     const {
       acceptableConclusions,
