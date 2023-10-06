@@ -15,7 +15,7 @@
     "all": "npm run build && npm run format && npm run lint && npm run package && npm test"
   },
   "engines": {
-    "node": ">= 16"
+    "node": ">= 18"
   },
   "repository": {
     "type": "git",
@@ -49,6 +49,6 @@
     "typescript": "^4.4.4"
   },
   "volta": {
-    "node": "16.16.0"
+    "node": "18.18.0"
   }
 }
