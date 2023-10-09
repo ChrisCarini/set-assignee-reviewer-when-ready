@@ -1,34 +1,36 @@
-name: "checks for testing failure (3sec & 5sec)"
-
-on:
-  pull_request:
-
-jobs:
-
-  test-3s-failure:
-    name: 'Test 3sec - failure'
-    runs-on: ubuntu-latest
-    steps:
-
-      - name: Fetch Sources
-        uses: actions/checkout@v4
-
-      - name: Sleep 3sec - fail
-        shell: bash
-        run: |
-          sleep 3
-          exit 1
-
-  test-5s-failure:
-    name: 'Test 5sec - failure'
-    runs-on: ubuntu-latest
-    steps:
-
-      - name: Fetch Sources
-        uses: actions/checkout@v4
-
-      - name: Sleep 5sec - fail
-        shell: bash
-        run: |
-          sleep 5
-          exit 1
+## NOTE (ChrisCarini - 2023-10-09) - Commenting out the file, as I believe this was strictly for testing, and I do not
+##  want to block CI in PRs.
+#name: "checks for testing failure (3sec & 5sec)"
+#
+#on:
+#  pull_request:
+#
+#jobs:
+#
+#  test-3s-failure:
+#    name: 'Test 3sec - failure'
+#    runs-on: ubuntu-latest
+#    steps:
+#
+#      - name: Fetch Sources
+#        uses: actions/checkout@v4
+#
+#      - name: Sleep 3sec - fail
+#        shell: bash
+#        run: |
+#          sleep 3
+#          exit 1
+#
+#  test-5s-failure:
+#    name: 'Test 5sec - failure'
+#    runs-on: ubuntu-latest
+#    steps:
+#
+#      - name: Fetch Sources
+#        uses: actions/checkout@v4
+#
+#      - name: Sleep 5sec - fail
+#        shell: bash
+#        run: |
+#          sleep 5
+#          exit 1
