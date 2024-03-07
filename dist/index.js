@@ -30418,8 +30418,8 @@ exports.getCheckRuns = getCheckRuns;
  * Get the required checks for the base ref.
  */
 function getRequiredCheckNames() {
-    var _a, _b;
     return __awaiter(this, void 0, void 0, function* () {
+        var _a, _b;
         const baseRef = (_a = (yield getPr())) === null || _a === void 0 ? void 0 : _a.base.ref;
         core.info(`Base Ref: ${baseRef}`);
         if (baseRef === undefined) {
