@@ -29,7 +29,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@actions/core": "^1.11.0",
+    "@actions/core": "^1.11.1",
     "@actions/github": "^6.0.0",
     "@actions/http-client": "^2.2.3",
     "@octokit/rest": "^21.0.2",
