@@ -89,12 +89,12 @@ async function getChecksToCheck(requiredChecksOnly: boolean, check: string): Pro
 
   core.info(`${check}s to check:`);
   core.info(`${'='.repeat(check.length + 16)}`);
-  checksToCheck.forEach((checkRun, index) => {
+  for (const [index, checkRun] of checksToCheck.entries()) {
     const idx = String(index).padStart(2, ' ');
     const status = checkRun.status.padStart(12, ' ');
     const conclusion = checkRun.conclusion?.padStart(16, ' ');
     core.info(`    - #${idx}) [${status} | ${conclusion}] -> ${checkRun.name} `);
-  });
+  }
   core.endGroup(); // `Getting ${check} to check...`
   return checksToCheck;
 }
@@ -104,14 +104,17 @@ async function computeCheckRunStatus(
   checksToCheck: CheckRun[],
   acceptableConclusions: string[],
   unacceptableConclusions: string[]
-): Promise<{ acceptable: boolean; unacceptable: boolean }> {
+): Promise<{
+  acceptable: boolean;
+  unacceptable: boolean;
+}> {
   core.startGroup(`Computing ${check} run status...`);
 
   const completedChecksToCheck = checksToCheck.filter((checkRun) => checkRun.status === 'completed');
 
   core.info(`Found ${completedChecksToCheck.length} completed ${check}s`);
 
-  const allCompleted = checksToCheck.length == completedChecksToCheck.length;
+  const allCompleted = checksToCheck.length === completedChecksToCheck.length;
   if (!allCompleted) {
     core.warning(`All ${check} runs have *NOT* completed. Exiting.`);
     process.exit(0);
@@ -129,7 +132,7 @@ async function computeCheckRunStatus(
   core.debug(`acceptableConclusionChecks:   ${acceptableConclusionChecks.map((cr) => cr.name)}`);
   core.debug(`unacceptableConclusionChecks: ${unacceptableConclusionChecks.map((cr) => cr.name)}`);
 
-  const acceptable = completedChecksToCheck.length == acceptableConclusionChecks.length;
+  const acceptable = completedChecksToCheck.length === acceptableConclusionChecks.length;
   const unacceptable = unacceptableConclusionChecks.length > 0;
 
   core.info(`All ${check}s are Acceptable:   ${acceptable}`);
@@ -145,7 +148,7 @@ async function takeAction(
   assignees: string[],
   reviewers: string[],
   isUnacceptable: boolean
-) {
+): Promise<void> {
   const prNumber = (await getPr()).number;
   core.startGroup(`Taking action on PR #${prNumber}`);
   if (isAcceptable && delayBeforeRequestingReviews) {
@@ -206,13 +209,19 @@ async function run(): Promise<void> {
     );
 
     await takeAction(acceptable, delayBeforeRequestingReviews, check, assignees, reviewers, unacceptable);
-  } catch (error: any) {
-    core.setFailed(error.message);
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      core.setFailed(error.message);
+    } else {
+      core.setFailed('An unexpected error occurred.');
+    }
     core.endGroup(); // End any lingering groups...
     process.exit(1);
   }
 }
 
-run().then(() => {
-  core.info('Completed.');
-});
+async () => {
+  await run();
+};
+
+core.info('Completed.');
