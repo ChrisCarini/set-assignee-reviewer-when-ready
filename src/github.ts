@@ -49,7 +49,7 @@ async function fetchPr(): Promise<MinimalPR> {
     sort: 'updated',
     direction: 'desc',
   });
-  const pullRequests = pulls.filter((pull) => pull.title == workflowRunDisplayTitle);
+  const pullRequests = pulls.filter((pull) => pull.title === workflowRunDisplayTitle);
   coreDebugJson(pullRequests, 'fetchPr() > pullRequests');
   if (pullRequests !== undefined && pullRequests.length >= 1) {
     return pullRequests[0];
@@ -76,8 +76,12 @@ export async function requestReviewers(reviewers: string[]): Promise<void> {
       reviewers,
     });
     coreDebugJson(response, `requestReviewers(${pr}, [${reviewers.join(',')}]) > response`);
-  } catch (error: any) {
-    core.warning(`[${error.message}] Error requesting reviewer(s) on PR #${pr} to: [${reviewers.join(',')}]`);
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      core.warning(`[${error.message}] Error requesting reviewer(s) on PR #${pr} to: [${reviewers.join(',')}]`);
+    } else {
+      core.warning(`Error requesting reviewer(s) on PR #${pr} to: [${reviewers.join(',')}] -- ${error}`);
+    }
   }
 }
 
@@ -98,8 +102,12 @@ export async function setAssignees(assignees: string[]): Promise<void> {
       assignees,
     });
     coreDebugJson(response, `setAssignees(${pr}, [${assignees.join(',')}]) > response`);
-  } catch (error: any) {
-    core.warning(`[${error.message}] Error assigning PR #${pr} to: [${assignees.join(',')}]`);
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      core.warning(`[${error.message}] Error assigning PR #${pr} to: [${assignees.join(',')}]`);
+    } else {
+      core.warning(`Error assigning PR #${pr} to: [${assignees.join(',')}] -- ${error}`);
+    }
   }
 }
 
@@ -125,13 +133,15 @@ export async function getCheckRuns(): Promise<CheckRun[]> {
   const { owner, repo } = github.context.repo;
 
   core.info(`Retrieving check runs for ${owner}/${repo}@${ref}...`);
-  const checkRuns: CheckRun[] = (
-    await client.rest.checks.listForRef({
-      owner,
-      repo,
-      ref,
-    })
-  ).data.check_runs;
+  const checkRuns: CheckRun[] = // We use the `client.request` because `client.rest.checks.listForRef` apparently returns the wrong type (nested CheckRun > app > owner). Ugh.. huh?
+    // await client.rest.checks.listForRef({
+    (
+      await client.request('GET /repos/{owner}/{repo}/commits/{ref}/check-runs', {
+        owner,
+        repo,
+        ref,
+      })
+    ).data.check_runs;
 
   core.info(`Retrieved ${checkRuns.length} check runs.`);
   coreDebugJson(checkRuns, 'getCheckRuns() > checkRuns');
@@ -162,8 +172,12 @@ export async function getRequiredCheckNames(): Promise<string[] | undefined> {
 
     coreDebugJson(result, 'getRequiredChecks() > result');
     return result?.contexts;
-  } catch (error: any) {
-    core.warning(`[${error.message}] Proceeding assuming there are no required checks.`);
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      core.warning(`[${error.message}] Proceeding assuming there are no required checks.`);
+    } else {
+      core.warning(`Error getting required checks for ${owner}/${repo}@${baseRef} -- ${error}`);
+    }
     return undefined;
   }
 }
@@ -205,7 +219,7 @@ export function getInputWithDefault(name: string, defaultValue: string): string 
  * @param value The object to pretty-print
  * @param name The name (used for header/footer)
  */
-export function coreDebugJson(value: object, name: string) {
+export function coreDebugJson(value: object, name: string): void {
   core.debug(`====== BEGIN ${name} ======`);
   core.debug(JSON.stringify(value, null, 4));
   core.debug(`======= END ${name} =======`);
