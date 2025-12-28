@@ -2,6 +2,7 @@ import * as core from '@actions/core';
 import * as github from '@actions/github';
 import { wait } from './wait';
 import {
+  CheckConclusion,
   CheckRun,
   coreDebugJson,
   getCheckRuns,
@@ -14,7 +15,7 @@ import {
   setAssignees,
 } from './github';
 
-const ALL_VALID_CHECK_CONCLUSIONS = [
+const ALL_VALID_CHECK_CONCLUSIONS: CheckConclusion[] = [
   'success',
   'failure',
   'neutral',
@@ -25,8 +26,8 @@ const ALL_VALID_CHECK_CONCLUSIONS = [
 ];
 
 type UserInputs = {
-  acceptableConclusions: string[];
-  unacceptableConclusions: string[];
+  acceptableConclusions: CheckConclusion[];
+  unacceptableConclusions: CheckConclusion[];
   assignees: string[];
   reviewers: string[];
   requiredChecksOnly: boolean;
@@ -44,8 +45,11 @@ async function gatherInputs(): Promise<UserInputs> {
   const pr = await getPr();
   core.info(`PR #: ${pr.number}`);
 
-  const acceptableConclusions = getInputArray('acceptableConclusions', ALL_VALID_CHECK_CONCLUSIONS);
-  const unacceptableConclusions = getInputArray('unacceptableConclusions', []);
+  const acceptableConclusions = getInputArray(
+    'acceptableConclusions',
+    ALL_VALID_CHECK_CONCLUSIONS
+  ) as CheckConclusion[];
+  const unacceptableConclusions = getInputArray('unacceptableConclusions', []) as CheckConclusion[];
   const assignees = getInputArray('assignees', []);
   const reviewers = getInputArray('reviewers', []);
   const requiredChecksOnly = getInputWithDefault('requiredChecksOnly', 'true') === 'true';
@@ -102,8 +106,8 @@ async function getChecksToCheck(requiredChecksOnly: boolean, check: string): Pro
 async function computeCheckRunStatus(
   check: string,
   checksToCheck: CheckRun[],
-  acceptableConclusions: string[],
-  unacceptableConclusions: string[]
+  acceptableConclusions: CheckConclusion[],
+  unacceptableConclusions: CheckConclusion[]
 ): Promise<{
   acceptable: boolean;
   unacceptable: boolean;
@@ -123,10 +127,10 @@ async function computeCheckRunStatus(
   core.info(`All ${check} runs have completed.`);
 
   const acceptableConclusionChecks = completedChecksToCheck.filter((checkRun) => {
-    return acceptableConclusions.includes(checkRun.conclusion || '');
+    return checkRun.conclusion !== null && acceptableConclusions.includes(checkRun.conclusion);
   });
   const unacceptableConclusionChecks = completedChecksToCheck.filter((checkRun) => {
-    return unacceptableConclusions.includes(checkRun.conclusion || '');
+    return checkRun.conclusion !== null && unacceptableConclusions.includes(checkRun.conclusion);
   });
 
   core.debug(`acceptableConclusionChecks:   ${acceptableConclusionChecks.map((cr) => cr.name)}`);

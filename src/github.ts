@@ -1,38 +1,60 @@
 import * as github from '@actions/github';
 import * as core from '@actions/core';
-import { components } from '@octokit/openapi-types';
 
-export type CheckRun = components['schemas']['check-run'];
-type MinimalPR = components['schemas']['pull-request-minimal'];
+export type OctokitClient = ReturnType<typeof github.getOctokit>;
 
-const token = core.getInput('token', { required: true });
-export const client = github.getOctokit(token);
+const token: string = core.getInput('token', { required: true });
+export const client: OctokitClient = github.getOctokit(token);
+
+type CheckRunsRequestResponse = Awaited<
+  ReturnType<typeof client.request<'GET /repos/{owner}/{repo}/commits/{ref}/check-runs'>>
+>;
+export type CheckRun = CheckRunsRequestResponse['data']['check_runs'][number];
+
+type PullsListResponse = Awaited<ReturnType<OctokitClient['rest']['pulls']['list']>>;
+type PullRequestFromList = PullsListResponse['data'][number];
+
+type StatusChecksProtectionResponse = Awaited<ReturnType<OctokitClient['rest']['repos']['getStatusChecksProtection']>>;
+type StatusCheckPolicy = StatusChecksProtectionResponse['data'];
+
+export type CheckConclusion = NonNullable<CheckRun['conclusion']>;
+interface WorkflowRunPayload {
+  pull_requests: PullRequestFromList[];
+  display_title: string;
+  head_sha: string;
+}
 
 /**
  * Cache for PR.
  */
-let prNumber: MinimalPR | null = null;
+let prNumber: PullRequestFromList | null = null;
 
 /**
- * Get the current context's PR information
+ * Get the current context's PR information.
+ * Caches the result to avoid repeated API calls.
+ * @returns The pull request representation
  */
-export async function getPr(): Promise<MinimalPR> {
+export async function getPr(): Promise<PullRequestFromList> {
   if (prNumber === null) {
     core.debug('PR Number not yet set; fetching...');
     prNumber = await fetchPr();
   } else {
-    core.debug(`PR Number already set; reusing PR #${prNumber}.`);
+    core.debug(`PR Number already set; reusing PR #${prNumber.number}.`);
   }
   return prNumber;
 }
 
 /**
- * Fetch PR information; extracted as this can yield an API call.
+ * Fetch PR information from the workflow_run payload or via API lookup.
+ * @returns The pull request representation
+ * @throws Error if no PR can be found
  */
-async function fetchPr(): Promise<MinimalPR> {
-  const pullRequest = github.context.payload.workflow_run.pull_requests[0];
+async function fetchPr(): Promise<PullRequestFromList> {
+  const workflowRun = github.context.payload.workflow_run as WorkflowRunPayload;
+  const pullRequest: PullRequestFromList | undefined = workflowRun.pull_requests[0];
+
   if (pullRequest !== undefined) {
-    core.debug(`github.context.payload.workflow_run.pull_requests[0] !== undefined : Using PR #${pullRequest}.`);
+    core.debug(`Found PR in workflow_run.pull_requests: PR #${pullRequest.number}`);
     return pullRequest;
   }
 
@@ -40,7 +62,7 @@ async function fetchPr(): Promise<MinimalPR> {
   // So, we need to go hunting for the associated pull request based on the display title
   // of the workflow_run. Grab the most recently updated PRs, and search for a matching
   // PR title.
-  const workflowRunDisplayTitle = github.context.payload.workflow_run.display_title;
+  const workflowRunDisplayTitle: string = workflowRun.display_title;
   const { owner, repo } = github.context.repo;
   const { data: pulls } = await client.rest.pulls.list({
     owner,
@@ -49,14 +71,14 @@ async function fetchPr(): Promise<MinimalPR> {
     sort: 'updated',
     direction: 'desc',
   });
-  const pullRequests = pulls.filter((pull) => pull.title === workflowRunDisplayTitle);
+  const pullRequests = pulls.filter((pull): boolean => pull.title === workflowRunDisplayTitle);
   coreDebugJson(pullRequests, 'fetchPr() > pullRequests');
   if (pullRequests !== undefined && pullRequests.length >= 1) {
     return pullRequests[0];
   }
 
   throw new Error(
-    `NO PR FOUND (Searched in 'github.content.payload.workflow_run.pull_requests[0]' and searched for title: ${workflowRunDisplayTitle})`
+    `NO PR FOUND (Searched in 'github.context.payload.workflow_run.pull_requests[0]' and searched for title: ${workflowRunDisplayTitle})`
   );
 }
 
@@ -126,14 +148,17 @@ export async function isPrOpen(pr: number): Promise<boolean> {
 }
 
 /**
- * Get the checkruns for the current context's workflow_run for the head SHA.
+ * Get the check runs for the current context's workflow_run for the head SHA.
+ * @returns Array of check runs for the commit
  */
 export async function getCheckRuns(): Promise<CheckRun[]> {
-  const ref = github.context.payload.workflow_run.head_sha;
+  const workflowRun = github.context.payload.workflow_run as WorkflowRunPayload;
+  const ref: string = workflowRun.head_sha;
   const { owner, repo } = github.context.repo;
 
   core.info(`Retrieving check runs for ${owner}/${repo}@${ref}...`);
   const checkRuns: CheckRun[] = // We use the `client.request` because `client.rest.checks.listForRef` apparently returns the wrong type (nested CheckRun > app > owner). Ugh.. huh?
+    //Using request directly gives us proper typing.
     // await client.rest.checks.listForRef({
     (
       await client.request('GET /repos/{owner}/{repo}/commits/{ref}/check-runs', {
@@ -150,27 +175,28 @@ export async function getCheckRuns(): Promise<CheckRun[]> {
 }
 
 /**
- * Get the required checks for the base ref.
+ * Get the required check names for the base ref from branch protection settings.
+ * @returns Array of required check names, or undefined if unavailable
  */
-export async function getRequiredCheckNames(): Promise<string[] | undefined> {
-  const baseRef = (await getPr())?.base.ref;
+export async function getRequiredCheckNames(): Promise<readonly string[] | undefined> {
+  const pr = await getPr();
+  const baseRef: string | undefined = pr?.base.ref;
   core.info(`Base Ref: ${baseRef}`);
   if (baseRef === undefined) {
-    core.error(`Error getting base ref for PR #${(await getPr())?.number}.`);
+    core.error(`Error getting base ref for PR #${pr?.number}.`);
     return undefined;
   }
   const { owner, repo } = github.context.repo;
 
   try {
     core.info(`Retrieving branch protection information for ${owner}/${repo}@${baseRef}...`);
-    const { data: result }: { data: components['schemas']['status-check-policy'] } =
-      await client.rest.repos.getStatusChecksProtection({
-        owner,
-        repo,
-        branch: baseRef,
-      });
+    const { data: result }: { data: StatusCheckPolicy } = await client.rest.repos.getStatusChecksProtection({
+      owner,
+      repo,
+      branch: baseRef,
+    });
 
-    coreDebugJson(result, 'getRequiredChecks() > result');
+    coreDebugJson(result, 'getRequiredCheckNames() > result');
     return result?.contexts;
   } catch (error: unknown) {
     if (error instanceof Error) {
@@ -183,17 +209,20 @@ export async function getRequiredCheckNames(): Promise<string[] | undefined> {
 }
 
 /**
- * Get user inputs as an array (expects the user input to be CSV)
+ * Get user inputs as an array (expects the user input to be CSV).
  * @param name The name of the user input
- * @param defaultVal The default value
+ * @param defaultVal The default value if input is empty
+ * @returns Array of trimmed string values
  */
-export function getInputArray(name: string, defaultVal: string[]): string[] {
-  return (
-    core
-      .getInput(name)
-      .split(',')
-      .map((i) => i.trim()) || defaultVal
-  );
+export function getInputArray(name: string, defaultVal: readonly string[]): string[] {
+  const input = core.getInput(name);
+  if (!input || input.trim() === '') {
+    return [...defaultVal];
+  }
+  return input
+    .split(',')
+    .map((item: string): string => item.trim())
+    .filter((item: string): boolean => item !== '');
 }
 
 /**
