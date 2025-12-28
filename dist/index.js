@@ -30955,15 +30955,6 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.client = void 0;
 exports.getPr = getPr;
@@ -30984,188 +30975,188 @@ exports.client = github.getOctokit(token);
  */
 let prNumber = null;
 /**
- * Get the current context's PR information
+ * Get the current context's PR information.
+ * Caches the result to avoid repeated API calls.
+ * @returns The pull request representation
  */
-function getPr() {
-    return __awaiter(this, void 0, void 0, function* () {
-        if (prNumber === null) {
-            core.debug('PR Number not yet set; fetching...');
-            prNumber = yield fetchPr();
-        }
-        else {
-            core.debug(`PR Number already set; reusing PR #${prNumber}.`);
-        }
-        return prNumber;
-    });
+async function getPr() {
+    if (prNumber === null) {
+        core.debug('PR Number not yet set; fetching...');
+        prNumber = await fetchPr();
+    }
+    else {
+        core.debug(`PR Number already set; reusing PR #${prNumber.number}.`);
+    }
+    return prNumber;
 }
 /**
- * Fetch PR information; extracted as this can yield an API call.
+ * Fetch PR information from the workflow_run payload or via API lookup.
+ * @returns The pull request representation
+ * @throws Error if no PR can be found
  */
-function fetchPr() {
-    return __awaiter(this, void 0, void 0, function* () {
-        const pullRequest = github.context.payload.workflow_run.pull_requests[0];
-        if (pullRequest !== undefined) {
-            core.debug(`github.context.payload.workflow_run.pull_requests[0] !== undefined : Using PR #${pullRequest}.`);
-            return pullRequest;
-        }
-        // It is possible that the `workflow_run` object has an empty `pull_requests` array.
-        // So, we need to go hunting for the associated pull request based on the display title
-        // of the workflow_run. Grab the most recently updated PRs, and search for a matching
-        // PR title.
-        const workflowRunDisplayTitle = github.context.payload.workflow_run.display_title;
-        const { owner, repo } = github.context.repo;
-        const { data: pulls } = yield exports.client.rest.pulls.list({
-            owner,
-            repo,
-            state: 'all',
-            sort: 'updated',
-            direction: 'desc',
-        });
-        const pullRequests = pulls.filter((pull) => pull.title === workflowRunDisplayTitle);
-        coreDebugJson(pullRequests, 'fetchPr() > pullRequests');
-        if (pullRequests !== undefined && pullRequests.length >= 1) {
-            return pullRequests[0];
-        }
-        throw new Error(`NO PR FOUND (Searched in 'github.content.payload.workflow_run.pull_requests[0]' and searched for title: ${workflowRunDisplayTitle})`);
+async function fetchPr() {
+    const workflowRun = github.context.payload.workflow_run;
+    const pullRequest = workflowRun.pull_requests[0];
+    if (pullRequest !== undefined) {
+        core.debug(`Found PR in workflow_run.pull_requests: PR #${pullRequest.number}`);
+        return pullRequest;
+    }
+    // It is possible that the `workflow_run` object has an empty `pull_requests` array.
+    // So, we need to go hunting for the associated pull request based on the display title
+    // of the workflow_run. Grab the most recently updated PRs, and search for a matching
+    // PR title.
+    const workflowRunDisplayTitle = workflowRun.display_title;
+    const { owner, repo } = github.context.repo;
+    const { data: pulls } = await exports.client.rest.pulls.list({
+        owner,
+        repo,
+        state: 'all',
+        sort: 'updated',
+        direction: 'desc',
     });
+    const pullRequests = pulls.filter((pull) => pull.title === workflowRunDisplayTitle);
+    coreDebugJson(pullRequests, 'fetchPr() > pullRequests');
+    if (pullRequests !== undefined && pullRequests.length >= 1) {
+        return pullRequests[0];
+    }
+    throw new Error(`NO PR FOUND (Searched in 'github.context.payload.workflow_run.pull_requests[0]' and searched for title: ${workflowRunDisplayTitle})`);
 }
 /**
  * Request reviews on the current context's PR from the specified reviewers.
  * @param reviewers The list of reviewers to request a review.
  */
-function requestReviewers(reviewers) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const pr = (yield getPr()).number;
-        core.info(`Requesting Reviewers for PR #${pr} to: ${reviewers.join(',')}`);
-        const { owner, repo } = github.context.repo;
-        try {
-            const response = yield exports.client.rest.pulls.requestReviewers({
-                owner,
-                repo,
-                pull_number: pr,
-                reviewers,
-            });
-            coreDebugJson(response, `requestReviewers(${pr}, [${reviewers.join(',')}]) > response`);
+async function requestReviewers(reviewers) {
+    const pr = (await getPr()).number;
+    core.info(`Requesting Reviewers for PR #${pr} to: ${reviewers.join(',')}`);
+    const { owner, repo } = github.context.repo;
+    try {
+        const response = await exports.client.rest.pulls.requestReviewers({
+            owner,
+            repo,
+            pull_number: pr,
+            reviewers,
+        });
+        coreDebugJson(response, `requestReviewers(${pr}, [${reviewers.join(',')}]) > response`);
+    }
+    catch (error) {
+        if (error instanceof Error) {
+            core.warning(`[${error.message}] Error requesting reviewer(s) on PR #${pr} to: [${reviewers.join(',')}]`);
         }
-        catch (error) {
-            if (error instanceof Error) {
-                core.warning(`[${error.message}] Error requesting reviewer(s) on PR #${pr} to: [${reviewers.join(',')}]`);
-            }
-            else {
-                core.warning(`Error requesting reviewer(s) on PR #${pr} to: [${reviewers.join(',')}] -- ${error}`);
-            }
+        else {
+            core.warning(`Error requesting reviewer(s) on PR #${pr} to: [${reviewers.join(',')}] -- ${error}`);
         }
-    });
+    }
 }
 /**
  *
  * Assign the current context's PR to the specified assignees.
  * @param assignees The list of assignees to assign the PR.
  */
-function setAssignees(assignees) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const pr = (yield getPr()).number;
-        core.info(`Setting Assignees for PR #${pr} to: ${assignees.join(',')}`);
-        const { owner, repo } = github.context.repo;
-        try {
-            const response = yield exports.client.rest.issues.addAssignees({
-                owner,
-                repo,
-                issue_number: pr,
-                assignees,
-            });
-            coreDebugJson(response, `setAssignees(${pr}, [${assignees.join(',')}]) > response`);
+async function setAssignees(assignees) {
+    const pr = (await getPr()).number;
+    core.info(`Setting Assignees for PR #${pr} to: ${assignees.join(',')}`);
+    const { owner, repo } = github.context.repo;
+    try {
+        const response = await exports.client.rest.issues.addAssignees({
+            owner,
+            repo,
+            issue_number: pr,
+            assignees,
+        });
+        coreDebugJson(response, `setAssignees(${pr}, [${assignees.join(',')}]) > response`);
+    }
+    catch (error) {
+        if (error instanceof Error) {
+            core.warning(`[${error.message}] Error assigning PR #${pr} to: [${assignees.join(',')}]`);
         }
-        catch (error) {
-            if (error instanceof Error) {
-                core.warning(`[${error.message}] Error assigning PR #${pr} to: [${assignees.join(',')}]`);
-            }
-            else {
-                core.warning(`Error assigning PR #${pr} to: [${assignees.join(',')}] -- ${error}`);
-            }
+        else {
+            core.warning(`Error assigning PR #${pr} to: [${assignees.join(',')}] -- ${error}`);
         }
-    });
+    }
 }
 /**
  * Check if the provided pull request is still open.
  * @param pr The PR number to check.
  */
-function isPrOpen(pr) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const { owner, repo } = github.context.repo;
-        const { data: pullRequest } = yield exports.client.rest.pulls.get({
+async function isPrOpen(pr) {
+    const { owner, repo } = github.context.repo;
+    const { data: pullRequest } = await exports.client.rest.pulls.get({
+        owner,
+        repo,
+        pull_number: pr,
+    });
+    return pullRequest.state === 'open';
+}
+/**
+ * Get the check runs for the current context's workflow_run for the head SHA.
+ * @returns Array of check runs for the commit
+ */
+async function getCheckRuns() {
+    const workflowRun = github.context.payload.workflow_run;
+    const ref = workflowRun.head_sha;
+    const { owner, repo } = github.context.repo;
+    core.info(`Retrieving check runs for ${owner}/${repo}@${ref}...`);
+    const checkRuns = // We use the `client.request` because `client.rest.checks.listForRef` apparently returns the wrong type (nested CheckRun > app > owner). Ugh.. huh?
+     
+    //Using request directly gives us proper typing.
+    // await client.rest.checks.listForRef({
+    (await exports.client.request('GET /repos/{owner}/{repo}/commits/{ref}/check-runs', {
+        owner,
+        repo,
+        ref,
+    })).data.check_runs;
+    core.info(`Retrieved ${checkRuns.length} check runs.`);
+    coreDebugJson(checkRuns, 'getCheckRuns() > checkRuns');
+    return checkRuns;
+}
+/**
+ * Get the required check names for the base ref from branch protection settings.
+ * @returns Array of required check names, or undefined if unavailable
+ */
+async function getRequiredCheckNames() {
+    const pr = await getPr();
+    const baseRef = pr?.base.ref;
+    core.info(`Base Ref: ${baseRef}`);
+    if (baseRef === undefined) {
+        core.error(`Error getting base ref for PR #${pr?.number}.`);
+        return undefined;
+    }
+    const { owner, repo } = github.context.repo;
+    try {
+        core.info(`Retrieving branch protection information for ${owner}/${repo}@${baseRef}...`);
+        const { data: result } = await exports.client.rest.repos.getStatusChecksProtection({
             owner,
             repo,
-            pull_number: pr,
+            branch: baseRef,
         });
-        return pullRequest.state === 'open';
-    });
+        coreDebugJson(result, 'getRequiredCheckNames() > result');
+        return result?.contexts;
+    }
+    catch (error) {
+        if (error instanceof Error) {
+            core.warning(`[${error.message}] Proceeding assuming there are no required checks.`);
+        }
+        else {
+            core.warning(`Error getting required checks for ${owner}/${repo}@${baseRef} -- ${error}`);
+        }
+        return undefined;
+    }
 }
 /**
- * Get the checkruns for the current context's workflow_run for the head SHA.
- */
-function getCheckRuns() {
-    return __awaiter(this, void 0, void 0, function* () {
-        const ref = github.context.payload.workflow_run.head_sha;
-        const { owner, repo } = github.context.repo;
-        core.info(`Retrieving check runs for ${owner}/${repo}@${ref}...`);
-        const checkRuns = // We use the `client.request` because `client.rest.checks.listForRef` apparently returns the wrong type (nested CheckRun > app > owner). Ugh.. huh?
-         
-        // await client.rest.checks.listForRef({
-        (yield exports.client.request('GET /repos/{owner}/{repo}/commits/{ref}/check-runs', {
-            owner,
-            repo,
-            ref,
-        })).data.check_runs;
-        core.info(`Retrieved ${checkRuns.length} check runs.`);
-        coreDebugJson(checkRuns, 'getCheckRuns() > checkRuns');
-        return checkRuns;
-    });
-}
-/**
- * Get the required checks for the base ref.
- */
-function getRequiredCheckNames() {
-    return __awaiter(this, void 0, void 0, function* () {
-        var _a, _b;
-        const baseRef = (_a = (yield getPr())) === null || _a === void 0 ? void 0 : _a.base.ref;
-        core.info(`Base Ref: ${baseRef}`);
-        if (baseRef === undefined) {
-            core.error(`Error getting base ref for PR #${(_b = (yield getPr())) === null || _b === void 0 ? void 0 : _b.number}.`);
-            return undefined;
-        }
-        const { owner, repo } = github.context.repo;
-        try {
-            core.info(`Retrieving branch protection information for ${owner}/${repo}@${baseRef}...`);
-            const { data: result } = yield exports.client.rest.repos.getStatusChecksProtection({
-                owner,
-                repo,
-                branch: baseRef,
-            });
-            coreDebugJson(result, 'getRequiredChecks() > result');
-            return result === null || result === void 0 ? void 0 : result.contexts;
-        }
-        catch (error) {
-            if (error instanceof Error) {
-                core.warning(`[${error.message}] Proceeding assuming there are no required checks.`);
-            }
-            else {
-                core.warning(`Error getting required checks for ${owner}/${repo}@${baseRef} -- ${error}`);
-            }
-            return undefined;
-        }
-    });
-}
-/**
- * Get user inputs as an array (expects the user input to be CSV)
+ * Get user inputs as an array (expects the user input to be CSV).
  * @param name The name of the user input
- * @param defaultVal The default value
+ * @param defaultVal The default value if input is empty
+ * @returns Array of trimmed string values
  */
 function getInputArray(name, defaultVal) {
-    return (core
-        .getInput(name)
+    const input = core.getInput(name);
+    if (!input || input.trim() === '') {
+        return [...defaultVal];
+    }
+    return input
         .split(',')
-        .map((i) => i.trim()) || defaultVal);
+        .map((item) => item.trim())
+        .filter((item) => item !== '');
 }
 /**
  * Get user inputs
@@ -31235,15 +31226,6 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 const core = __importStar(__nccwpck_require__(7484));
 const github = __importStar(__nccwpck_require__(3228));
@@ -31261,193 +31243,169 @@ const ALL_VALID_CHECK_CONCLUSIONS = [
 /**
  * Gather all the inputs from the user workflow file.
  */
-function gatherInputs() {
-    return __awaiter(this, void 0, void 0, function* () {
-        core.startGroup('Gathering inputs...');
-        (0, github_1.coreDebugJson)(github.context, 'github.context');
-        const pr = yield (0, github_1.getPr)();
-        core.info(`PR #: ${pr.number}`);
-        const acceptableConclusions = (0, github_1.getInputArray)('acceptableConclusions', ALL_VALID_CHECK_CONCLUSIONS);
-        const unacceptableConclusions = (0, github_1.getInputArray)('unacceptableConclusions', []);
-        const assignees = (0, github_1.getInputArray)('assignees', []);
-        const reviewers = (0, github_1.getInputArray)('reviewers', []);
-        const requiredChecksOnly = (0, github_1.getInputWithDefault)('requiredChecksOnly', 'true') === 'true';
-        const delayBeforeRequestingReviews = parseInt((0, github_1.getInputWithDefault)('delayBeforeRequestingReviews', '0'));
-        const check = requiredChecksOnly ? 'required check' : 'check';
-        core.debug('Inputs:');
-        core.debug('=======');
-        core.debug(`acceptableConclusions:        ${acceptableConclusions}`);
-        core.debug(`unacceptableConclusions:      ${unacceptableConclusions}`);
-        core.debug(`assignees:                    ${assignees}`);
-        core.debug(`reviewers:                    ${reviewers}`);
-        core.debug(`requiredChecksOnly:           ${requiredChecksOnly}`);
-        core.debug(`delayBeforeRequestingReviews: ${delayBeforeRequestingReviews}`);
-        core.debug('');
-        core.endGroup(); // Gathering inputs...
-        return {
-            acceptableConclusions,
-            unacceptableConclusions,
-            assignees,
-            reviewers,
-            requiredChecksOnly,
-            delayBeforeRequestingReviews,
-            check,
-        };
-    });
+async function gatherInputs() {
+    core.startGroup('Gathering inputs...');
+    (0, github_1.coreDebugJson)(github.context, 'github.context');
+    const pr = await (0, github_1.getPr)();
+    core.info(`PR #: ${pr.number}`);
+    const acceptableConclusions = (0, github_1.getInputArray)('acceptableConclusions', ALL_VALID_CHECK_CONCLUSIONS);
+    const unacceptableConclusions = (0, github_1.getInputArray)('unacceptableConclusions', []);
+    const assignees = (0, github_1.getInputArray)('assignees', []);
+    const reviewers = (0, github_1.getInputArray)('reviewers', []);
+    const requiredChecksOnly = (0, github_1.getInputWithDefault)('requiredChecksOnly', 'true') === 'true';
+    const delayBeforeRequestingReviews = parseInt((0, github_1.getInputWithDefault)('delayBeforeRequestingReviews', '0'));
+    const check = requiredChecksOnly ? 'required check' : 'check';
+    core.debug('Inputs:');
+    core.debug('=======');
+    core.debug(`acceptableConclusions:        ${acceptableConclusions}`);
+    core.debug(`unacceptableConclusions:      ${unacceptableConclusions}`);
+    core.debug(`assignees:                    ${assignees}`);
+    core.debug(`reviewers:                    ${reviewers}`);
+    core.debug(`requiredChecksOnly:           ${requiredChecksOnly}`);
+    core.debug(`delayBeforeRequestingReviews: ${delayBeforeRequestingReviews}`);
+    core.debug('');
+    core.endGroup(); // Gathering inputs...
+    return {
+        acceptableConclusions,
+        unacceptableConclusions,
+        assignees,
+        reviewers,
+        requiredChecksOnly,
+        delayBeforeRequestingReviews,
+        check,
+    };
 }
-function getChecksToCheck(requiredChecksOnly, check) {
-    return __awaiter(this, void 0, void 0, function* () {
-        var _a;
-        core.startGroup(`Getting ${check} to check...`);
-        const allCheckRuns = yield (0, github_1.getCheckRuns)();
-        // Call getRequiredCheckNames() outside the filter so we only make a single API call.
-        const requiredCheckNames = requiredChecksOnly ? yield (0, github_1.getRequiredCheckNames)() : undefined;
-        const checksToCheck = requiredChecksOnly
-            ? allCheckRuns.filter(
-            // If requiredCheckNames is undefined, that means either (1) we could not get the baseRef, or
-            // (2) the particular branch has no required checks.
-            (checkRun) => requiredCheckNames === undefined || requiredCheckNames.includes(checkRun.name))
-            : allCheckRuns;
-        core.info(`${check}s to check:`);
-        core.info(`${'='.repeat(check.length + 16)}`);
-        for (const [index, checkRun] of checksToCheck.entries()) {
-            const idx = String(index).padStart(2, ' ');
-            const status = checkRun.status.padStart(12, ' ');
-            const conclusion = (_a = checkRun.conclusion) === null || _a === void 0 ? void 0 : _a.padStart(16, ' ');
-            core.info(`    - #${idx}) [${status} | ${conclusion}] -> ${checkRun.name} `);
-        }
-        core.endGroup(); // `Getting ${check} to check...`
-        return checksToCheck;
-    });
+async function getChecksToCheck(requiredChecksOnly, check) {
+    core.startGroup(`Getting ${check} to check...`);
+    const allCheckRuns = await (0, github_1.getCheckRuns)();
+    // Call getRequiredCheckNames() outside the filter so we only make a single API call.
+    const requiredCheckNames = requiredChecksOnly ? await (0, github_1.getRequiredCheckNames)() : undefined;
+    const checksToCheck = requiredChecksOnly
+        ? allCheckRuns.filter(
+        // If requiredCheckNames is undefined, that means either (1) we could not get the baseRef, or
+        // (2) the particular branch has no required checks.
+        (checkRun) => requiredCheckNames === undefined || requiredCheckNames.includes(checkRun.name))
+        : allCheckRuns;
+    core.info(`${check}s to check:`);
+    core.info(`${'='.repeat(check.length + 16)}`);
+    for (const [index, checkRun] of checksToCheck.entries()) {
+        const idx = String(index).padStart(2, ' ');
+        const status = checkRun.status.padStart(12, ' ');
+        const conclusion = checkRun.conclusion?.padStart(16, ' ');
+        core.info(`    - #${idx}) [${status} | ${conclusion}] -> ${checkRun.name} `);
+    }
+    core.endGroup(); // `Getting ${check} to check...`
+    return checksToCheck;
 }
-function computeCheckRunStatus(check, checksToCheck, acceptableConclusions, unacceptableConclusions) {
-    return __awaiter(this, void 0, void 0, function* () {
-        core.startGroup(`Computing ${check} run status...`);
-        const completedChecksToCheck = checksToCheck.filter((checkRun) => checkRun.status === 'completed');
-        core.info(`Found ${completedChecksToCheck.length} completed ${check}s`);
-        const allCompleted = checksToCheck.length === completedChecksToCheck.length;
-        if (!allCompleted) {
-            core.warning(`All ${check} runs have *NOT* completed. Exiting.`);
-            process.exit(0);
-        }
-        core.info(`All ${check} runs have completed.`);
-        const acceptableConclusionChecks = completedChecksToCheck.filter((checkRun) => {
-            return acceptableConclusions.includes(checkRun.conclusion || '');
-        });
-        const unacceptableConclusionChecks = completedChecksToCheck.filter((checkRun) => {
-            return unacceptableConclusions.includes(checkRun.conclusion || '');
-        });
-        core.debug(`acceptableConclusionChecks:   ${acceptableConclusionChecks.map((cr) => cr.name)}`);
-        core.debug(`unacceptableConclusionChecks: ${unacceptableConclusionChecks.map((cr) => cr.name)}`);
-        const acceptable = completedChecksToCheck.length === acceptableConclusionChecks.length;
-        const unacceptable = unacceptableConclusionChecks.length > 0;
-        core.info(`All ${check}s are Acceptable:   ${acceptable}`);
-        core.info(`Any ${check}s are Unacceptable: ${unacceptable}`);
-        core.endGroup(); // `Computing Check Run Status for PR #${pr.number}...`
-        return { acceptable, unacceptable };
+async function computeCheckRunStatus(check, checksToCheck, acceptableConclusions, unacceptableConclusions) {
+    core.startGroup(`Computing ${check} run status...`);
+    const completedChecksToCheck = checksToCheck.filter((checkRun) => checkRun.status === 'completed');
+    core.info(`Found ${completedChecksToCheck.length} completed ${check}s`);
+    const allCompleted = checksToCheck.length === completedChecksToCheck.length;
+    if (!allCompleted) {
+        core.warning(`All ${check} runs have *NOT* completed. Exiting.`);
+        process.exit(0);
+    }
+    core.info(`All ${check} runs have completed.`);
+    const acceptableConclusionChecks = completedChecksToCheck.filter((checkRun) => {
+        return checkRun.conclusion !== null && acceptableConclusions.includes(checkRun.conclusion);
     });
+    const unacceptableConclusionChecks = completedChecksToCheck.filter((checkRun) => {
+        return checkRun.conclusion !== null && unacceptableConclusions.includes(checkRun.conclusion);
+    });
+    core.debug(`acceptableConclusionChecks:   ${acceptableConclusionChecks.map((cr) => cr.name)}`);
+    core.debug(`unacceptableConclusionChecks: ${unacceptableConclusionChecks.map((cr) => cr.name)}`);
+    const acceptable = completedChecksToCheck.length === acceptableConclusionChecks.length;
+    const unacceptable = unacceptableConclusionChecks.length > 0;
+    core.info(`All ${check}s are Acceptable:   ${acceptable}`);
+    core.info(`Any ${check}s are Unacceptable: ${unacceptable}`);
+    core.endGroup(); // `Computing Check Run Status for PR #${pr.number}...`
+    return { acceptable, unacceptable };
 }
-function takeAction(isAcceptable, delayBeforeRequestingReviews, check, assignees, reviewers, isUnacceptable) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const prNumber = (yield (0, github_1.getPr)()).number;
-        core.startGroup(`Taking action on PR #${prNumber}`);
-        if (isAcceptable && delayBeforeRequestingReviews) {
-            // All checks have passed
-            core.info(`All ${check} runs have acceptable conclusions. Waiting for ${delayBeforeRequestingReviews} seconds...`);
-            yield (0, wait_1.wait)(delayBeforeRequestingReviews * 1000);
-            core.info(`Finished waiting for ${delayBeforeRequestingReviews} seconds.`);
-            const isOpen = yield (0, github_1.isPrOpen)(prNumber);
-            if (isOpen) {
-                core.info(`PR #${prNumber} is still open. Skipping assigning / requesting reviews.`);
-                yield assignAndRequestReviewers(assignees, reviewers);
-            }
-            else {
-                core.info(`PR #${prNumber} is no longer open. Skipping assigning / requesting reviews.`);
-            }
-        }
-        else if (isUnacceptable) {
-            core.info(`Some ${check} runs have unacceptable conclusions.`);
-            yield assignAndRequestReviewers(assignees, reviewers);
+async function takeAction(isAcceptable, delayBeforeRequestingReviews, check, assignees, reviewers, isUnacceptable) {
+    const prNumber = (await (0, github_1.getPr)()).number;
+    core.startGroup(`Taking action on PR #${prNumber}`);
+    if (isAcceptable && delayBeforeRequestingReviews) {
+        // All checks have passed
+        core.info(`All ${check} runs have acceptable conclusions. Waiting for ${delayBeforeRequestingReviews} seconds...`);
+        await (0, wait_1.wait)(delayBeforeRequestingReviews * 1000);
+        core.info(`Finished waiting for ${delayBeforeRequestingReviews} seconds.`);
+        const isOpen = await (0, github_1.isPrOpen)(prNumber);
+        if (isOpen) {
+            core.info(`PR #${prNumber} is still open. Skipping assigning / requesting reviews.`);
+            await assignAndRequestReviewers(assignees, reviewers);
         }
         else {
-            core.info(`Nothing to do.`);
+            core.info(`PR #${prNumber} is no longer open. Skipping assigning / requesting reviews.`);
         }
-        core.endGroup(); // `Taking action on PR #${pr.number}`
-    });
+    }
+    else if (isUnacceptable) {
+        core.info(`Some ${check} runs have unacceptable conclusions.`);
+        await assignAndRequestReviewers(assignees, reviewers);
+    }
+    else {
+        core.info(`Nothing to do.`);
+    }
+    core.endGroup(); // `Taking action on PR #${pr.number}`
 }
-function assignAndRequestReviewers(assignees, reviewers) {
-    return __awaiter(this, void 0, void 0, function* () {
-        if (assignees.length > 0) {
-            yield (0, github_1.setAssignees)(assignees);
+async function assignAndRequestReviewers(assignees, reviewers) {
+    if (assignees.length > 0) {
+        await (0, github_1.setAssignees)(assignees);
+    }
+    else {
+        core.info('Assignees not set. Skipping PR assignment...');
+    }
+    if (reviewers.length > 0) {
+        await (0, github_1.requestReviewers)(reviewers);
+    }
+    else {
+        core.info('Reviewers not set. Skipping requesting review...');
+    }
+}
+async function run() {
+    core.info('Starting...');
+    try {
+        const { acceptableConclusions, unacceptableConclusions, assignees, reviewers, requiredChecksOnly, delayBeforeRequestingReviews, check, } = await gatherInputs();
+        const checksToCheck = await getChecksToCheck(requiredChecksOnly, check);
+        const { acceptable, unacceptable } = await computeCheckRunStatus(check, checksToCheck, acceptableConclusions, unacceptableConclusions);
+        await takeAction(acceptable, delayBeforeRequestingReviews, check, assignees, reviewers, unacceptable);
+    }
+    catch (error) {
+        if (error instanceof Error) {
+            core.setFailed(error.message);
         }
         else {
-            core.info('Assignees not set. Skipping PR assignment...');
+            core.setFailed('An unexpected error occurred.');
         }
-        if (reviewers.length > 0) {
-            yield (0, github_1.requestReviewers)(reviewers);
-        }
-        else {
-            core.info('Reviewers not set. Skipping requesting review...');
-        }
-    });
+        core.endGroup(); // End any lingering groups...
+        process.exit(1);
+    }
 }
-function run() {
-    return __awaiter(this, void 0, void 0, function* () {
-        core.info('Starting...');
-        try {
-            const { acceptableConclusions, unacceptableConclusions, assignees, reviewers, requiredChecksOnly, delayBeforeRequestingReviews, check, } = yield gatherInputs();
-            const checksToCheck = yield getChecksToCheck(requiredChecksOnly, check);
-            const { acceptable, unacceptable } = yield computeCheckRunStatus(check, checksToCheck, acceptableConclusions, unacceptableConclusions);
-            yield takeAction(acceptable, delayBeforeRequestingReviews, check, assignees, reviewers, unacceptable);
-        }
-        catch (error) {
-            if (error instanceof Error) {
-                core.setFailed(error.message);
-            }
-            else {
-                core.setFailed('An unexpected error occurred.');
-            }
-            core.endGroup(); // End any lingering groups...
-            process.exit(1);
-        }
-    });
-}
-() => __awaiter(void 0, void 0, void 0, function* () {
-    yield run();
-});
+async () => {
+    await run();
+};
 core.info('Completed.');
 
 
 /***/ }),
 
 /***/ 910:
-/***/ (function(__unused_webpack_module, exports) {
+/***/ ((__unused_webpack_module, exports) => {
 
 "use strict";
 
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.wait = wait;
 /**
  * Wait for the specified number of milliseconds.
  * @param milliseconds The number of milliseconds to wait.
  */
-function wait(milliseconds) {
-    return __awaiter(this, void 0, void 0, function* () {
-        return new Promise((resolve) => {
-            if (isNaN(milliseconds)) {
-                throw new Error('milliseconds not a number');
-            }
-            setTimeout(() => resolve('done!'), milliseconds);
-        });
+async function wait(milliseconds) {
+    return new Promise((resolve) => {
+        if (isNaN(milliseconds)) {
+            throw new Error('milliseconds not a number');
+        }
+        setTimeout(() => resolve('done!'), milliseconds);
     });
 }
 

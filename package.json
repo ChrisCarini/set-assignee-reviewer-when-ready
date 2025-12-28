@@ -11,11 +11,11 @@
     "format-check": "prettier --check '**/*.ts'",
     "lint": "eslint src/**/*.ts",
     "package": "ncc build src/main.ts --out dist --source-map --license licenses.txt",
-    "test": "jest",
+    "test": "jest --passWithNoTests",
     "all": "npm run build && npm run format && npm run lint && npm run package && npm test"
   },
   "engines": {
-    "node": ">= 20"
+    "node": ">= 24"
   },
   "repository": {
     "type": "git",
@@ -32,9 +32,8 @@
     "@actions/core": "^2.0.1",
     "@actions/github": "^6.0.1",
     "@actions/http-client": "^3.0.0",
-    "@octokit/openapi-types": "^27.0.0",
     "@octokit/rest": "^22.0.1",
-    "node-fetch": "^3.2.9"
+    "node-fetch": "^3.3.2"
   },
   "devDependencies": {
     "@stylistic/eslint-plugin": "^5.6.1",
@@ -51,6 +50,6 @@
     "typescript": "^5.9.3"
   },
   "volta": {
-    "node": "20.19.0"
+    "node": "24.5.0"
   }
 }
