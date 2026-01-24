@@ -30,7 +30,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@actions/core": "^2.0.2",
-    "@actions/github": "^6.0.1",
+    "@actions/github": "^7.0.0",
     "@actions/http-client": "^3.0.1",
     "@octokit/rest": "^22.0.1",
     "node-fetch": "^3.3.2"
