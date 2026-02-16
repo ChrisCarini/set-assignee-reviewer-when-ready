@@ -22,7 +22,7 @@ test('test runs', () => {
   process.env['INPUT_MILLISECONDS'] = '500';
   process.env['INPUT_TOKEN'] = 'ghp_DUMMY_TOKEN';
   const np = process.execPath;
-  const ip = path.join(__dirname, '..', 'lib', 'main.js');
+  const ip = path.join(__dirname, '..', 'dist', 'index.js');
   const options: cp.ExecFileSyncOptions = {
     env: process.env,
   };

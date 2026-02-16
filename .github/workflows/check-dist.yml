@@ -32,6 +32,10 @@ jobs:
         if: ${{ github.event_name == 'pull_request' }}
         with:
           ref: ${{ github.head_ref }}
+          # Use a PAT so that the push in "Push changes back to PR branch"
+          # triggers subsequent workflow runs (pushes with the default
+          # GITHUB_TOKEN do not trigger new workflow runs).
+          token: ${{ secrets.REPO_SCOPE_GITHUB_TOKEN }}
 
       - name: Set Node.js
         uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
