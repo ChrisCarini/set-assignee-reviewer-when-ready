@@ -48,6 +48,12 @@ export default defineConfig([
     rules: {
       'i18n-text/no-en': 'off',
       'eslint-comments/no-use': 'off',
+      'eslint-comments/disable-enable-pair': 'off',
+      'eslint-comments/no-aggregating-enable': 'off',
+      'eslint-comments/no-duplicate-disable': 'off',
+      'eslint-comments/no-unlimited-disable': 'off',
+      'eslint-comments/no-unused-disable': 'off',
+      'eslint-comments/no-unused-enable': 'off',
       'import/no-namespace': 'off',
       'no-unused-vars': 'off',
       '@typescript-eslint/no-unused-vars': 'error',
